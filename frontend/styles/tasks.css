@@ -1,0 +1,316 @@
+.tasks-page {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column
+}
+
+.tasks-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px
+}
+
+.tasks-toolbar p {
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--muted);
+    margin: 0
+}
+
+.tasks-toolbar .button {
+    white-space: nowrap
+}
+
+.task-actions {
+    display: flex;
+    gap: 8px
+}
+
+.kanban-board {
+    display: grid;
+    grid-template-columns:repeat(4, minmax(225px, 1fr));
+    gap: 14px;
+    overflow-x: auto;
+    min-height: 0;
+    flex: 1;
+    padding: 2px 2px 10px;
+    scrollbar-width: thin;
+    scrollbar-color: #B79D73 transparent
+}
+
+.kanban-column {
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: #D7BD9026;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 5px 5px 10px rgb(92 65 42 / 0.08);
+}
+
+.kanban-column > header {
+    min-height: 70px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 12px;
+    background: #FBF3E040;
+    border-bottom: 1px solid var(--line)
+}
+
+.kanban-column h2 {
+    font: 19px var(--serif);
+    margin: 0
+}
+
+.kanban-column .task-add {
+    margin-left: auto;
+    font-size: 23px
+}
+
+.kanban-column[data-status=IN_PROGRESS] > header {
+    border-top: 3px solid var(--terracotta)
+}
+
+.kanban-column[data-status=DONE] > header {
+    border-top: 3px solid var(--sage)
+}
+
+.kanban-cards {
+    padding: 10px;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 120px;
+    scrollbar-width: thin;
+    transition: background .15s
+}
+
+.task-card {
+    position: relative;
+    background: #FAF0DB;
+    border: 1px solid #BA9C7070;
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 10px;
+    box-shadow: 0 3px 5px #4A392E09;
+    transition: box-shadow .15s
+}
+
+.task-card:hover {
+    box-shadow: 0 4px 12px #4A392E20
+}
+
+.task-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px
+}
+
+.task-grip {
+    font-size: 21px;
+    color: var(--muted);
+    cursor: grab
+}
+
+.priority {
+    font-size: 10px;
+    border-radius: 4px;
+    padding: 3px 6px;
+    background: #D7BD9040
+}
+
+.priority-High {
+    color: #934222;
+    background: #A85B3220
+}
+
+.priority-Low {
+    color: #526247;
+    background: #78836B20
+}
+
+.task-open {
+    display: block;
+    width: 100%;
+    padding: 0;
+    text-align: left;
+    font-size: 14px;
+    line-height: 1.5;
+    overflow-wrap: anywhere
+}
+
+.task-excerpt {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.6;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    white-space: pre-wrap
+}
+
+.task-dates {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 12px
+}
+
+.task-dates .overdue {
+    color: var(--terracotta);
+    font-weight: 600
+}
+
+.task-order {
+    display: flex;
+    gap: 8px;
+    border-top: 1px solid var(--line);
+    margin-top: 12px;
+    padding-top: 7px
+}
+
+.task-order button {
+    padding: 3px 6px
+}
+
+.task-order button:last-child {
+    margin-left: auto;
+    font-size: 10px
+}
+
+.task-done .task-open, .calendar-task.task-done > span {
+    text-decoration: line-through;
+    color: var(--muted)
+}
+
+.column-empty {
+    text-align: center;
+    padding: 30px 8px;
+    font: italic 16px/1.6 var(--serif);
+    color: var(--muted)
+}
+
+.column-empty small {
+    display: block;
+    font: 11px/1.7 var(--sans);
+    margin-top: 8px
+}
+
+.dragging {
+    opacity: .35
+}
+
+.drop-active {
+    background: #78836B16
+}
+
+.drop-before:before, .drop-after:after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--terracotta)
+}
+
+.drop-before:before {
+    top: -7px
+}
+
+.drop-after:after {
+    bottom: -7px
+}
+
+#tasks-error {
+    padding: 10px;
+    border: 1px solid #A85B3250;
+    color: var(--terracotta);
+    font-size: 12px;
+    margin-bottom: 12px
+}
+
+#task-dialog {
+    width: min(580px, calc(100vw - 28px));
+    padding: 0;
+    border: 1px solid #B99C70;
+    border-radius: 9px;
+    background: var(--parchment);
+    color: var(--ink);
+    max-height: 90dvh;
+    overflow: auto
+}
+
+#task-dialog::backdrop {
+    background: #30251D88;
+    backdrop-filter: blur(3px)
+}
+
+.task-delete-confirm {
+    margin-top: 18px;
+    padding: 12px;
+    background: #A85B3210;
+    font-size: 12px
+}
+
+.calendar-task {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: #78836B15;
+    border-left: 2px solid var(--sage);
+    border-radius: 3px;
+    padding: 5px;
+    margin-bottom: 4px
+}
+
+.calendar-task > span {
+    display: block;
+    font-size: 10px;
+    line-height: 1.4;
+    overflow-wrap: anywhere
+}
+
+.calendar-task > small {
+    font-size: 8px;
+    display: block;
+    color: var(--muted);
+    margin-top: 3px
+}
+
+.calendar-task.has-deadline {
+    border-color: var(--terracotta);
+    background: #A85B3210
+}
+
+#today-tasks .calendar-task > span {
+    font-size: 12px
+}
+
+#today-tasks .calendar-task > small {
+    font-size: 10px
+}
+
+@media (max-width: 700px) {
+    .tasks-toolbar {
+        align-items: flex-start;
+        flex-direction: column
+    }
+
+    .task-actions {
+        width: 100%;
+        justify-content: space-between
+    }
+
+    .kanban-board {
+        grid-template-columns:repeat(4, minmax(230px, 85vw));
+        gap: 10px
+    }
+}

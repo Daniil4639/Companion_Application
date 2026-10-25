@@ -1,0 +1,88 @@
+.welcome-page {
+    min-height: 100dvh;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: radial-gradient(ellipse at top, #786044, #35291F 75%);
+    color: var(--ink)
+}
+
+.welcome-card {
+    width: min(100%, 500px);
+    padding: 36px;
+    background: var(--parchment);
+    border: 4px double #B99C70;
+    border-radius: 12px;
+    box-shadow: 0 15px 65px #170F0C70
+}
+
+.welcome-card h1 {
+    font: 32px var(--serif);
+    margin: 12px 0
+}
+
+.welcome-card p {
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--muted)
+}
+
+.profile-form label {
+    display: block;
+    font-size: 12px;
+    margin: 18px 0 0
+}
+
+.profile-form input, .profile-form select {
+    display: block;
+    width: 100%;
+    padding: 11px;
+    margin-top: 7px;
+    border: 1px solid #BDA179;
+    background: #FBF3E0;
+    color: var(--ink)
+}
+
+.profile-form input:disabled {
+    background: #D7BD9040;
+    color: #887B69;
+    cursor: not-allowed
+}
+
+.profile-form small {
+    display: block;
+    color: var(--muted);
+    line-height: 1.6;
+    margin-top: 6px
+}
+
+.profile-form .button {
+    margin-top: 20px
+}
+
+.profile-message {
+    color: var(--terracotta);
+    font-size: 12px;
+    line-height: 1.6
+}
+
+.settings-page .settings-card + .settings-card {
+    margin-top: 20px
+}
+
+.settings-page {
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #B79D73 #E8D9B8;
+    overscroll-behavior: contain;
+}
+
+@media (max-width: 600px) {
+    .welcome-page {
+        padding: 14px
+    }
+
+    .welcome-card {
+        padding: 24px
+    }
+}

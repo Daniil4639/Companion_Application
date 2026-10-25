@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Добро пожаловать · Folliant</title>
+    <link rel="stylesheet" href="../styles/styles.css">
+    <link rel="stylesheet" href="../styles/profile.css">
+    <script defer src="../scripts/timezone.js"></script>
+    <script defer src="../scripts/profile.js"></script>
+</head>
+<body class="welcome-page" data-onboarding="true">
+<main class="welcome-card">
+    <p class="eyebrow">FOLLIANT · ЛИЧНЫЙ ДНЕВНИК</p>
+    <h1>Ваша первая страница</h1>
+    <p>Представьтесь и выберите часовой пояс. Это локальный профиль для вашего дневника.</p>
+    <form id="profile-form" class="profile-form">
+        <label>Системное имя<input name="username" maxlength="64" required autocomplete="username"
+                                   placeholder="Как вас зовут?"></label>
+        <label>Отображаемое имя<input name="display_name" maxlength="128" autocomplete="nickname"
+                                      placeholder="Необязательно"><small>Если не заполнено, используем системное
+            имя.</small></label>
+        <label>Часовой пояс<select name="timezone_mode">
+            <option value="system">Как на устройстве</option>
+            <option value="manual">Выбрать вручную</option>
+        </select></label>
+        <label>Пояс IANA<input name="timezone" list="timezone-options" maxlength="64" required autocomplete="off">
+            <datalist id="timezone-options"></datalist>
+        </label>
+        <label>Язык интерфейса<select name="locale">
+            <option value="ru-RU">Русский</option>
+        </select><small>Пока доступен только русский язык.</small></label>
+        <p class="profile-message" role="status"></p>
+        <button class="button primary" type="submit">Открыть дневник</button>
+    </form>
+</main>
+</body>
+</html>

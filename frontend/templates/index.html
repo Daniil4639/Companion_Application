@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#4A392E">
+    <title>Расписание · Folliant</title>
+    <link rel="stylesheet" href="../styles/styles.css">
+    <link rel="stylesheet" href="../styles/calendar.css">
+    <link rel="stylesheet" href="../styles/dialog.css">
+    <link rel="stylesheet" href="../styles/profile.css">
+    <link rel="stylesheet" href="../styles/tasks.css">
+    <script defer src="../scripts/timezone.js"></script>
+    <script defer src="../scripts/profile.js"></script>
+    <script defer src="../scripts/calendar-core.js"></script>
+    <script defer src="../scripts/icons.js"></script>
+    <script defer src="../scripts/api.js"></script>
+    <script defer src="../scripts/dialogs.js"></script>
+    <script defer src="../scripts/tasks-api.js"></script>
+    <script defer src="../scripts/task-dialog.js"></script>
+    <script defer src="../scripts/tasks.js"></script>
+    <script defer src="../scripts/app.js"></script>
+</head>
+<body class="journal-collapsed">
+<a class="skip-link" href="#workspace">Перейти к расписанию</a>
+<div class="app-shell">
+    <aside class="navigation" aria-label="Главная навигация">
+        <a class="brand" href="#schedule" aria-label="Folliant — расписание">
+            <img src="../resources/Icon.png" style="width: 45px; height: 45px; object-fit: contain">
+            <span class="nav-copy"><b class="brand-name">Folliant</b><small>Личный дневник</small></span>
+        </a>
+        <div class="nav-divider"><span>ВАШЕ ПРОСТРАНСТВО</span></div>
+        <nav>
+            <button class="nav-link active" data-page="schedule" aria-current="page" title="Расписание">
+                <span data-icon="calendar"></span>
+                <span class="nav-copy">Расписание</span>
+                <i class="active-mark"></i>
+            </button>
+            <button class="nav-link" data-page="events" title="Все события">
+                <span data-icon="list"></span>
+                <span class="nav-copy">Все события</span>
+                <i class="active-mark"></i>
+            </button>
+            <button class="nav-link" data-page="tasks" title="Задачи">
+                <span data-icon="check"></span>
+                <span class="nav-copy">Задачи</span>
+                <i class="active-mark"></i>
+            </button>
+        </nav>
+        <div class="nav-bottom">
+            <div class="nav-art" aria-hidden="true"><span data-icon="branch"></span>
+                <p>У каждого дня<br>своя история.</p></div>
+            <button class="nav-link" data-page="settings" title="Настройки"><span data-icon="settings"></span><span
+                    class="nav-copy">Настройки</span><i class="active-mark"></i></button>
+            <button class="nav-link collapse-nav" id="nav-toggle" title="Свернуть меню" aria-label="Свернуть меню"
+                    aria-expanded="true"><span data-icon="panel-left"></span><span class="nav-copy">Свернуть меню</span>
+            </button>
+        </div>
+    </aside>
+
+    <main class="workspace" id="workspace" tabindex="-1">
+        <header class="page-heading">
+            <div><p class="eyebrow"><span class="tiny-diamond"></span> ЛИЧНЫЙ ДНЕВНИК</p>
+                <h1 id="page-title">Расписание<span class="title-ornament" aria-hidden="true">✧</span></h1>
+                <p class="page-subtitle" id="page-subtitle">Место для планов, встреч и маленьких радостей.</p></div>
+            <div class="heading-actions">
+                <button class="button primary" id="new-event" aria-label="Добавить событие"><span
+                        data-icon="plus"></span><span>Добавить событие</span></button>
+            </div>
+        </header>
+        <div class="notice preview-notice" id="preview-notice" hidden><span data-icon="spark"></span><span>Предпросмотр оформления · события приведены для примера, изменения недоступны.</span>
+        </div>
+        <div class="notice error-notice" id="error-notice" role="alert" hidden><span data-icon="alert"></span><span
+                id="error-text"></span>
+            <button class="text-button" id="retry">Повторить</button>
+        </div>
+
+        <section class="calendar-page" id="schedule-page" aria-label="Календарь">
+            <div class="calendar-toolbar">
+                <div class="view-switch" aria-label="Масштаб календаря">
+                    <button data-view="years" aria-pressed="false">Годы</button>
+                    <button data-view="months" aria-pressed="false">Месяцы</button>
+                    <button data-view="week" class="selected" aria-pressed="true">Недели</button>
+                </div>
+                <div class="date-navigation">
+                    <button class="icon-button" id="previous" aria-label="Предыдущая неделя"><span
+                            data-icon="chevron-left"></span></button>
+                    <span id="range-label" aria-live="polite"></span>
+                    <button class="icon-button" id="next" aria-label="Следующая неделя"><span
+                            data-icon="chevron-right"></span></button>
+                </div>
+                <button class="button today-button" id="today"><span data-icon="sun"></span>Сегодня</button>
+            </div>
+            <div class="calendar-surface" id="calendar-surface" aria-busy="false">
+                <div id="calendar-view" class="calendar-view"></div>
+                <div class="loading-line" aria-hidden="true"></div>
+            </div>
+            <footer class="calendar-footer"><span class="calendar-hint"><span data-icon="mouse"></span><span
+                    id="calendar-hint">Нажмите на свободное время, чтобы добавить событие</span></span><span
+                    id="timezone-label"></span></footer>
+        </section>
+        <section class="tasks-page" id="tasks-page" hidden aria-label="Kanban задачи">
+            <div class="tasks-toolbar"><p id="tasks-state" role="status">Место для идей и дел</p>
+                <div class="task-actions">
+                    <button class="button" id="reload-tasks"><span data-icon="refresh"></span>Обновить</button>
+                    <button class="button primary" id="new-task">Новая задача</button>
+                </div>
+            </div>
+            <div id="tasks-error" role="alert" hidden></div>
+            <div class="kanban-board" id="kanban-board" aria-label="Доска задач"></div>
+        </section>
+        <section class="events-page" id="events-page" hidden aria-label="Все события">
+            <div class="section-toolbar"><p>Все ваши события и повторяющиеся серии</p>
+                <button class="button" id="reload-events"><span data-icon="refresh"></span>Обновить</button>
+            </div>
+            <div id="events-list"></div>
+            <button class="button load-more" id="load-more" hidden>Показать ещё</button>
+        </section>
+        <section class="settings-page" id="settings-page" hidden aria-label="Настройки">
+            <article class="settings-card"><h2>Ваш профиль</h2>
+                <form id="profile-form" class="profile-form">
+                    <label>Системное имя<input name="username" maxlength="64" required autocomplete="username"
+                                               placeholder="Как вас зовут?"></label>
+                    <label>Отображаемое имя<input name="display_name" maxlength="128" autocomplete="nickname"
+                                                  placeholder="Необязательно"><small>Если не заполнено, используем
+                        системное имя.</small></label>
+                    <label>Часовой пояс<select name="timezone_mode">
+                        <option value="system">Как на устройстве</option>
+                        <option value="manual">Выбрать вручную</option>
+                    </select></label>
+                    <label>Пояс IANA<input name="timezone" list="timezone-options" maxlength="64" required
+                                           autocomplete="off">
+                        <datalist id="timezone-options"></datalist>
+                    </label>
+                    <label>Язык интерфейса<select name="locale">
+                        <option value="ru-RU">Русский</option>
+                    </select><small>Пока доступен только русский язык.</small></label>
+                    <p class="profile-message" role="status"></p>
+                    <button class="button primary" type="submit">Сохранить профиль</button>
+                </form>
+            </article>
+            <article class="settings-card"><span class="setting-emblem" data-icon="sun"></span>
+                <h2>Ваш ритм</h2>
+                <p>Небольшие настройки, чтобы дневник был удобен именно вам.</p>
+                <label class="setting-row"><span><b>Плотность расписания</b><small>Высота одного часа в недельной сетке</small></span><select
+                        id="density">
+                    <option value="64">Обычная</option>
+                    <option value="48">Компактная</option>
+                    <option value="80">Просторная</option>
+                </select></label>
+                <label class="setting-row"><span><b>Начинать просмотр с</b><small>Начальное положение прокрутки</small></span><select
+                        id="start-hour">
+                    <option value="0">00:00</option>
+                    <option value="6">06:00</option>
+                    <option value="8">08:00</option>
+                    <option value="9">09:00</option>
+                </select></label>
+                <div class="setting-row"><span><b>Часовой пояс</b><small>Текущий пояс календаря</small></span><span
+                        class="timezone-value" id="settings-zone"></span></div>
+            </article>
+        </section>
+    </main>
+
+    <aside class="journal" id="journal" aria-label="Панель дня">
+        <div class="journal-rail">
+            <button class="icon-button panel-button" id="journal-toggle" title="Открыть панель дня"
+                    aria-label="Открыть панель дня" aria-expanded="false" aria-controls="journal-content"><span
+                    data-icon="panel-right"></span></button>
+        </div>
+        <div class="journal-inner" id="journal-content" hidden inert>
+            <header class="journal-heading"><span class="eyebrow">НА СТРАНИЦАХ ДНЕВНИКА</span>
+                <div><h2>Сегодня</h2><span data-icon="sun"></span></div>
+                <p id="today-label"></p></header>
+            <section class="mini-calendar" aria-label="Маленький календарь">
+                <div class="mini-navigation">
+                    <button class="icon-button" id="mini-previous" aria-label="Предыдущий месяц"><span
+                            data-icon="chevron-left"></span></button>
+                    <button id="mini-title" class="text-button"></button>
+                    <button class="icon-button" id="mini-next" aria-label="Следующий месяц"><span
+                            data-icon="chevron-right"></span></button>
+                </div>
+                <div class="mini-weekdays" aria-hidden="true">
+                    <span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span>
+                </div>
+                <div id="mini-days" class="mini-days"></div>
+            </section>
+            <div class="ornament-divider" aria-hidden="true"><span>✧</span></div>
+            <section class="today-agenda">
+                <div class="agenda-heading"><h3>Планы на сегодня</h3><span id="today-count" class="count-badge">—</span>
+                </div>
+                <div id="today-events"></div>
+            </section>
+            <button class="button journal-add" id="journal-add"><span data-icon="plus"></span>Добавить событие</button>
+            <section class="today-task-agenda" aria-label="Задачи на сегодня">
+                <div class="agenda-heading"><h3>Задачи на сегодня</h3><span id="today-tasks-count"
+                                                                            class="count-badge">—</span></div>
+                <div id="today-tasks" aria-live="polite"></div>
+            </section>
+            <button class="button journal-add" id="journal-add-task"><span data-icon="plus"></span>Добавить задачу
+            </button>
+            <footer class="journal-footnote"><span data-icon="leaf"></span>
+                <p>Оставьте немного времени<br>для себя.</p></footer>
+        </div>
+    </aside>
+</div>
+<dialog id="event-dialog" aria-labelledby="dialog-title">
+    <div id="dialog-content"></div>
+</dialog>
+<dialog id="task-dialog" aria-labelledby="task-dialog-title">
+    <div id="task-dialog-content"></div>
+</dialog>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
