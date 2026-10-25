@@ -1,6 +1,7 @@
 from .enums import RecurrenceFrequency, EventExceptionStatus
 
-_all_ = [
+
+__all__ = [
     'RecurrenceFrequency',
     'EventExceptionStatus'
 ]

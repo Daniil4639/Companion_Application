@@ -1,7 +1,8 @@
 from .calendar import calendarService
 from .recurrence import generate_occurrences
 
-_all_ = [
+
+__all__ = [
     'calendarService',
     'generate_occurrences'
 ]

@@ -1,7 +1,8 @@
 from .settings import settings
 from .config_logging import character_helper_logger
 
-_all_ = [
+
+__all__ = [
     "settings",
     "character_helper_logger"
 ]

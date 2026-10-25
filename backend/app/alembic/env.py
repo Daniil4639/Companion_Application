@@ -1,91 +1,51 @@
 import asyncio
-import importlib
-import os
 from logging.config import fileConfig
-from pathlib import Path
-
-from dotenv import load_dotenv
-from sqlalchemy import pool
-from sqlalchemy.engine import Connection
+from sqlalchemy import event, pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
-
 from alembic import context
-from backend.app.models import *
+from backend.app.config import settings
+from backend.app.models import EventSeries, EventException, RecurrenceRule
 from backend.app.db.base import Base
 
 
-load_dotenv(".env")
-
-
-auth_db_url = f"sqlite+aiosqlite:///./{os.getenv("SQL_LITE_DB_NAME")}.db"
-
-
 config = context.config
-config.set_main_option("sqlalchemy.url", auth_db_url)
-
-if config.config_file_name is not None and not context.is_offline_mode():
+if not config.get_main_option("sqlalchemy.url"):
+    config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
+if config.config_file_name is not None:
     fileConfig(config.config_file_name, disable_existing_loggers=False)
-
-
 target_metadata = Base.metadata
 
 
-def run_migrations_offline() -> None:
-    """Run migrations in 'offline' mode.
-
-    This configures the context with just a URL
-    and not an Engine, though an Engine is acceptable
-    here as well.  By skipping the Engine creation
-    we don't even need a DBAPI to be available.
-
-    Calls to context.execute() here emit the given string to the
-    script output.
-
-    """
-    url = config.get_main_option("sqlalchemy.url")
-    context.configure(
-        url=url,
-        target_metadata=target_metadata,
-        literal_binds=True,
-        dialect_opts={"paramstyle": "named"},
-    )
-
+def run_migrations(connection):
+    context.configure(connection=connection, target_metadata=target_metadata, render_as_batch=True,
+                      compare_type=True, compare_server_default=True, transactional_ddl=True)
     with context.begin_transaction():
         context.run_migrations()
+        if connection.exec_driver_sql("PRAGMA foreign_key_check").fetchall():
+            raise RuntimeError("Migration failed foreign key validation")
 
 
-def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+async def run_async_migrations():
+    engine = async_engine_from_config(config.get_section(config.config_ini_section, {}),
+                                      prefix="sqlalchemy.", poolclass=pool.NullPool)
+    @event.listens_for(engine.sync_engine, "connect")
+    def configure(connection, _):
+        connection.isolation_level = None
+        # Batch rebuilds reference tables; integrity is checked before commit.
+        connection.execute("PRAGMA foreign_keys=OFF")
 
-    with context.begin_transaction():
-        context.run_migrations()
+    @event.listens_for(engine.sync_engine, "begin")
+    def begin(connection):
+        connection.exec_driver_sql("BEGIN")
 
-
-async def run_async_migrations() -> None:
-    """In this scenario we need to create an Engine
-    and associate a connection with the context.
-
-    """
-
-    connectable = async_engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
-
-    async with connectable.connect() as connection:
-        await connection.run_sync(do_run_migrations)
-
-    await connectable.dispose()
-
-
-def run_migrations_online() -> None:
-    """Run migrations in 'online' mode."""
-
-    asyncio.run(run_async_migrations())
+    try:
+        async with engine.connect() as connection:
+            await connection.run_sync(run_migrations)
+    finally:
+        await engine.dispose()
 
 
 if context.is_offline_mode():
-    run_migrations_offline()
+    raise RuntimeError("Calendar data migration requires an online database connection")
 else:
-    run_migrations_online()
+    asyncio.run(run_async_migrations())

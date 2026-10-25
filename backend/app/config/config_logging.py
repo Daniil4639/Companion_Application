@@ -5,6 +5,7 @@ import sys
 def setup_logger(name: str, level : int) -> logging.Logger:
     logger = logging.getLogger(name)
     logger.setLevel(level)
+    logger.propagate = False
 
     if not logger.handlers:
         formatter = logging.Formatter(

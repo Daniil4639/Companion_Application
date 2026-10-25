@@ -1,35 +1,28 @@
-"""Serves the PyScript frontend (HTML + static assets)."""
+"""First-launch routing for the single local profile."""
+from fastapi import APIRouter, Depends
+from fastapi.responses import FileResponse, RedirectResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+from backend.app.config.settings import PROJECT_ROOT
+from backend.app.db import get_db
+from backend.app.services.user_service import find_user
 
-from fastapi import APIRouter
-from fastapi.responses import FileResponse, HTMLResponse
-from pathlib import Path
 
 frontend_router = APIRouter()
-
-# ─── Resolve paths ──────────────────────────────────────────
-
-_PROJECT_ROOT = Path(__file__).resolve().parents[2].parent
-print(_PROJECT_ROOT)
-_TEMPLATES = _PROJECT_ROOT / "frontend" / "templates"
-_STYLES = _PROJECT_ROOT / "frontend" / "styles"
-_SCRIPTS = _PROJECT_ROOT / "frontend" / "scripts"
+TEMPLATES = PROJECT_ROOT / "frontend" / "templates"
 
 
-@frontend_router.get("/", response_class=HTMLResponse)
-async def serve_index():
-    return FileResponse(_TEMPLATES / "index.html")
+@frontend_router.get("/", include_in_schema=False)
+@frontend_router.get("/templates/index.html", include_in_schema=False)
+async def serve_index(session: AsyncSession = Depends(get_db)):
+    page = "index.html" if await find_user(session) else "welcome.html"
+
+    return FileResponse(TEMPLATES / page, headers={"Cache-Control": "no-store"})
 
 
-@frontend_router.get("/chat", response_class=HTMLResponse)
-async def serve_chat():
-    return FileResponse(_TEMPLATES / "chat.html")
+@frontend_router.get("/welcome", include_in_schema=False)
+@frontend_router.get("/templates/welcome.html", include_in_schema=False)
+async def serve_welcome(session: AsyncSession = Depends(get_db)):
+    if await find_user(session):
+        return RedirectResponse("/", status_code=303)
 
-
-@frontend_router.get("/styles/{style_file}", response_class=FileResponse)
-async def serve_style(style_file: str):
-    return FileResponse(_STYLES / style_file)
-
-
-@frontend_router.get("/scripts/{script_file}", response_class=FileResponse)
-async def serve_script(script_file: str):
-    return FileResponse(_SCRIPTS / script_file)
+    return FileResponse(TEMPLATES / "welcome.html", headers={"Cache-Control": "no-store"})

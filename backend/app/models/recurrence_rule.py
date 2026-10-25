@@ -1,27 +1,18 @@
 import uuid
-
-from sqlalchemy import Column, DateTime, Enum, Integer, JSON, Uuid, CheckConstraint
-
-from backend.app.db import Base
+from sqlalchemy import Column, Enum, Integer, JSON, Uuid, CheckConstraint
+from backend.app.db.base import Base
+from backend.app.db.types import UTCDateTime
 from backend.app.utils import RecurrenceFrequency
 
 
 class RecurrenceRule(Base):
-    __tablename__ = "recurrence_rules"
 
+    __tablename__ = "recurrence_rules"
     __table_args__ = (
-        CheckConstraint(
-            "interval > 0",
-            name="ck_recurrence_rule_interval_positive",
-        ),
-        CheckConstraint(
-            "count IS NULL OR count > 0",
-            name="ck_recurrence_rule_count_positive",
-        ),
-        CheckConstraint(
-            "NOT (count IS NOT NULL AND until IS NOT NULL)",
-            name="ck_recurrence_rule_count_until_exclusive",
-        ),
+        CheckConstraint("frequency IN ('DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY')", name="recurrence_frequency"),
+        CheckConstraint("interval > 0", name="ck_recurrence_rule_interval_positive"),
+        CheckConstraint("count IS NULL OR count > 0", name="ck_recurrence_rule_count_positive"),
+        CheckConstraint("NOT (count IS NOT NULL AND until IS NOT NULL)", name="ck_recurrence_rule_count_until_exclusive"),
     )
 
     id = Column(
@@ -31,11 +22,7 @@ class RecurrenceRule(Base):
     )
 
     frequency = Column(
-        Enum(
-            RecurrenceFrequency,
-            name="recurrence_frequency",
-            native_enum=False
-        ),
+        Enum(RecurrenceFrequency, name="recurrence_frequency", native_enum=False, validate_strings=True),
         nullable=False
     )
 
@@ -61,7 +48,7 @@ class RecurrenceRule(Base):
     )
 
     until = Column(
-        DateTime(timezone=True),
+        UTCDateTime(),
         nullable=True
     )
 
