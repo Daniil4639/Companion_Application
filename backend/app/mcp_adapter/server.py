@@ -3,15 +3,17 @@ from contextlib import asynccontextmanager
 from datetime import date, datetime
 from typing import Annotated
 from uuid import UUID
-
 from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ToolAnnotations
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import SQLAlchemyError
-
 from backend.app.db import get_db
+from backend.app.config import settings
+from backend.app.mcp_adapter.mutations import register_mutations
+from backend.app.mcp_adapter.calendar_editing import register_calendar_editing
+from backend.app.mcp_adapter.recurrence_editing import register_recurrence_editing
 from backend.app.dto.tasks import TaskStatus, TaskPriority
 from backend.app.dto.schedule import ScheduleOccurrenceResponse
 from backend.app.services.tasks import taskService, InvalidTaskData
@@ -41,7 +43,7 @@ class ScheduleResult(BaseModel):
 def create_mcp():
     server = MCPServer(
         "Folliant",
-        instructions="Read-only access to local tasks and calendar. Dates in schedule requests must include a UTC offset.",
+        instructions="Manage local tasks and calendar. Use schedule_get for expected_version and schedule_preview_change before recurrence edits. Rule replacement/splitting require explicit exception policy if exceptions exist. Whole-series deletion is forbidden. Dates require UTC offsets. Writes persist immediately.",
     )
     # Reuse get_db's factory and guaranteed async-with cleanup for each tool call.
     session_context = asynccontextmanager(get_db)
@@ -89,6 +91,10 @@ def create_mcp():
         except SQLAlchemyError:
             raise ToolError("Database unavailable; retry the request.") from None
 
+    register_mutations(server)
+    register_calendar_editing(server)
+    register_recurrence_editing(server)
+
     http_app = server.streamable_http_app(
         streamable_http_path="/mcp",
         stateless_http=True,
@@ -97,12 +103,12 @@ def create_mcp():
         transport_security=TransportSecuritySettings(
             enable_dns_rebinding_protection=True,
             allowed_hosts=[
-                "127.0.0.1:8181",
-                "localhost:8181",
+                f"127.0.0.1:{settings.port}",
+                f"localhost:{settings.port}",
             ],
             allowed_origins=[
-                "http://127.0.0.1:8181",
-                "http://localhost:8181",
+                f"http://127.0.0.1:{settings.port}",
+                f"http://localhost:{settings.port}",
             ],
         ),
     )

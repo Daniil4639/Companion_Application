@@ -36,16 +36,17 @@ def timestamp(value):
 class CalendarService:
     """Transport-independent operations. Caller owns commit/rollback."""
 
-
     @staticmethod
-    async def create_event(title, start_at, finish_at, timezone, description, recurrence_rule, session, category="default"):
+    async def create_event(title, start_at, finish_at, timezone, description, recurrence_rule, session,
+                           category="default"):
         rule_data = None
 
         if recurrence_rule is not None:
             rule_data = validate(RecurrenceRuleCreate, recurrence_rule).model_dump()
 
         data = validate(EventCreate, dict(title=title, start_at=start_at, finish_at=finish_at,
-                        timezone=timezone, description=description, recurrence_rule=rule_data, category=category))
+                                          timezone=timezone, description=description, recurrence_rule=rule_data,
+                                          category=category))
 
         rule = RecurrenceRule(**data.recurrence_rule.model_dump()) if data.recurrence_rule else None
         series = EventSeries(**data.model_dump(exclude={"recurrence_rule"}), recurrence_rule=rule)
@@ -69,6 +70,19 @@ class CalendarService:
 
 
     @staticmethod
+    async def get_event_details(event_series_id, session):
+        series = (await session.execute(
+            select(EventSeries).options(selectinload(EventSeries.recurrence_rule),
+                                        selectinload(EventSeries.exceptions))
+            .where(EventSeries.id == event_series_id)
+            .execution_options(populate_existing=True)
+        )).scalar_one_or_none()
+        if series is None:
+            raise CalendarNotFound("Event series not found")
+        return series
+
+
+    @staticmethod
     async def list_events(session, limit=100, offset=0):
         if not 1 <= limit <= 500 or offset < 0:
             raise InvalidCalendarData("Invalid pagination")
@@ -83,7 +97,8 @@ class CalendarService:
         patch = validate(EventUpdate, changes).model_dump(exclude_unset=True)
         series = await self.get_event_series(event_series_id, session)
 
-        current = dict(title=series.title, category=series.category, description=series.description, start_at=series.start_at,
+        current = dict(title=series.title, category=series.category, description=series.description,
+                       start_at=series.start_at,
                        finish_at=series.finish_at, timezone=series.timezone,
                        recurrence_rule=RecurrenceRuleCreate.model_validate(series.recurrence_rule).model_dump()
                        if series.recurrence_rule else None)
@@ -156,7 +171,7 @@ class CalendarService:
                 raise InvalidCalendarData("Invalid occurrence date") from exc
 
             exists = bool(generate_occurrences(series.start_at, series.recurrence_rule,
-                          original, end, series.timezone))
+                                               original, end, series.timezone))
 
         if not exists:
             raise CalendarNotFound("Occurrence does not exist in this series")
@@ -193,6 +208,33 @@ class CalendarService:
                                           data.start_at, data.finish_at, session)
 
 
+    async def update_occurrence(self, event_series_id, original_start_at, changes, session):
+        """Patch one instance using the existing exception representation. Caller owns transaction."""
+        if not changes or set(changes) - {"title", "description", "start_at", "finish_at"}:
+            raise InvalidCalendarData("Supply title, description, start_at or finish_at")
+        original = await self._require_occurrence(event_series_id, original_start_at, session)
+        series = await self.get_event_details(event_series_id, session)
+        if series.recurrence_rule is None:
+            raise InvalidCalendarData("Occurrence editing requires a recurring series")
+        existing = next((e for e in series.exceptions if e.original_start_at == original), None)
+        if existing and existing.status == EventExceptionStatus.CANCELLED:
+            raise CalendarConflict("Occurrence is cancelled; implicit restoration is not allowed")
+        current = dict(
+            title=existing.title if existing and existing.title is not None else series.title,
+            description=existing.description if existing and existing.description is not None else series.description,
+            start_at=existing.start_at if existing else original,
+            finish_at=existing.finish_at if existing else original + (series.finish_at - series.start_at),
+            timezone=series.timezone, recurrence_rule=None, category=series.category)
+        data = validate(EventCreate, {**current, **changes})
+        exception = await self.move_occurrence(event_series_id, original, data.start_at, data.finish_at, session)
+        if "title" in changes:
+            exception.title = data.title
+        if "description" in changes:
+            exception.description = data.description
+        await session.flush()
+        return exception
+
+
     async def cancel_occurrence(self, event_series_id, original_start_at, session):
         original = await self._require_occurrence(event_series_id, original_start_at, session)
 
@@ -205,6 +247,10 @@ class CalendarService:
 
         await session.execute(delete(EventException).where(
             EventException.event_series_id == event_series_id, EventException.original_start_at == original))
+        # Removing an exception must not resurrect a previously issued snapshot version.
+        series = await self.get_event_series(event_series_id, session)
+        series.updated_at = utc_now()
+        await session.flush()
 
 
     @staticmethod
@@ -244,43 +290,48 @@ class CalendarService:
         grouped = {}
         for exception in exceptions:
             grouped.setdefault(exception.event_series_id, {})[exception.original_start_at] = exception
-        result = {}
+        return render_schedule(rows, grouped, start, end)
 
-        for series in rows:
-            overrides = grouped.get(series.id, {})
-            duration = series.finish_at - series.start_at
 
-            try:
-                lower = start - duration
+def render_schedule(rows, grouped, start, end):
+    """Pure occurrence rendering shared by stored schedules and previews."""
+    result = {}
 
-            except OverflowError as exc:
-                raise InvalidCalendarData("Date range is too close to datetime limits") from exc
+    for series in rows:
+        overrides = grouped.get(series.id, {})
+        duration = series.finish_at - series.start_at
 
-            originals = (generate_occurrences(series.start_at, series.recurrence_rule, lower, end, series.timezone)
-                         if series.recurrence_rule else [series.start_at])
+        try:
+            lower = start - duration
 
-            for original in set(originals) | set(overrides):
-                exception = overrides.get(original)
+        except OverflowError as exc:
+            raise InvalidCalendarData("Date range is too close to datetime limits") from exc
 
-                if exception and exception.status == EventExceptionStatus.CANCELLED:
-                    continue
+        originals = (generate_occurrences(series.start_at, series.recurrence_rule, lower, end, series.timezone)
+                     if series.recurrence_rule else [series.start_at])
 
-                actual_start = exception.start_at if exception else original
+        for original in set(originals) | set(overrides):
+            exception = overrides.get(original)
 
-                actual_end = exception.finish_at if exception else original + duration
+            if exception and exception.status == EventExceptionStatus.CANCELLED:
+                continue
 
-                if actual_start < end and actual_end > start:
-                    result[(series.id, original)] = ScheduleOccurrence(
-                        event_series_id=series.id, original_start_at=original,
-                        start_at=actual_start, finish_at=actual_end,
-                        title=exception.title if exception and exception.title is not None else series.title,
-                        description=exception.description if exception and exception.description is not None else series.description,
-                        category=series.category)
+            actual_start = exception.start_at if exception else original
 
-                    if len(result) > MAX_SCHEDULE_ITEMS:
-                        raise InvalidCalendarData("Schedule exceeds the 10000 occurrence limit")
+            actual_end = exception.finish_at if exception else original + duration
 
-        return sorted(result.values(), key=lambda item: (item.start_at, str(item.event_series_id), item.original_start_at))
+            if actual_start < end and actual_end > start:
+                result[(series.id, original)] = ScheduleOccurrence(
+                    event_series_id=series.id, original_start_at=original,
+                    start_at=actual_start, finish_at=actual_end,
+                    title=exception.title if exception and exception.title is not None else series.title,
+                    description=exception.description if exception and exception.description is not None else series.description,
+                    category=series.category)
+
+                if len(result) > MAX_SCHEDULE_ITEMS:
+                    raise InvalidCalendarData("Schedule exceeds the 10000 occurrence limit")
+
+    return sorted(result.values(), key=lambda item: (item.start_at, str(item.event_series_id), item.original_start_at))
 
 
 calendarService = CalendarService()

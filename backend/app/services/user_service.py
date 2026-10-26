@@ -16,6 +16,26 @@ async def find_user(session):
     return await session.get(User, 1)
 
 
+async def get_time_context(session):
+    """Only public time settings; system mode uses the browser's last saved IANA zone."""
+    from backend.app.dto.recurrence_editing import UserTimeContext
+    from backend.app.utils.time import zone
+    user = await find_user(session)
+    timezone = user.timezone if user else "UTC"
+    now = utc_now()
+    local = now.astimezone(zone(timezone))
+    warnings = []
+    if user is None:
+        warnings.append("No profile exists; UTC fallback is used")
+    elif user.timezone_mode == "system":
+        warnings.append(
+            "System timezone is the browser's last saved value; MCP cannot inspect the current client OS timezone")
+    return UserTimeContext(now_utc=now, local_datetime=local, local_date=local.date(), timezone=timezone,
+                           timezone_mode=user.timezone_mode if user else None,
+                           timezone_source="saved_profile" if user else "utc_fallback",
+                           locale=user.locale if user else "ru-RU", warnings=warnings)
+
+
 async def get_user(session):
     user = await find_user(session)
     if user is None:

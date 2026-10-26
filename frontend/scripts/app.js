@@ -169,6 +169,7 @@
         $('#page-subtitle').textContent = subtitles[page];
         document.title = titles[page] + ' · Folliant';
         $('#new-event').hidden = page === 'settings' || page === 'tasks';
+        $('#reload-schedule').hidden = page !== 'schedule';
         if (page === 'schedule') {
             renderCalendar();
             loadSchedule();
@@ -210,6 +211,7 @@
     };
     $('#retry').onclick = () => state.page === 'events' ? loadSeries() : loadSchedule();
     $('#reload-events').onclick = () => loadSeries();
+    $('#reload-schedule').onclick = () => loadSchedule();
     $('#load-more').onclick = () => loadSeries(true);
     $('#mini-previous').onclick = () => {
         state.mini = new Date(state.mini.getFullYear(), state.mini.getMonth() - 1, 1);
@@ -390,6 +392,7 @@
     }
 
     async function loadSchedule() {
+        $('#reload-schedule').disabled = true;
         const generation = ++state.generation;
         state.controller?.abort();
         state.controller = new AbortController();
@@ -416,7 +419,10 @@
             renderToday(true);
             document.body.classList.remove('connected');
         } finally {
-            if (generation === state.generation) $('#calendar-surface').setAttribute('aria-busy', 'false');
+            if (generation === state.generation) {
+                $('#calendar-surface').setAttribute('aria-busy', 'false');
+                $('#reload-schedule').disabled = false;
+            }
         }
     }
 

@@ -1,1 +1,1 @@
-"""Read-only MCP adapter for the existing application services."""
+"""MCP adapter for existing task and calendar application services."""
