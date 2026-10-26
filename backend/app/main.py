@@ -13,6 +13,9 @@ from backend.app.api.frontend_router import frontend_router
 from fastapi.staticfiles import StaticFiles
 from backend.app.api.user_router import user_router
 from backend.app.api.tasks_router import tasks_router
+from starlette.routing import Route
+from backend.app.mcp_adapter.server import create_mcp
+from backend.app.mcp_adapter.security import LocalOnlyMCP
 
 
 def migrate():
@@ -22,11 +25,17 @@ def migrate():
 
 
 @asynccontextmanager
-async def lifespan(_):
+async def lifespan(app):
     try:
         await asyncio.to_thread(migrate)
         character_helper_logger.info("Calendar database is ready")
-        yield
+
+        # SDK session managers are single-use; create one for each application start.
+        app.state.mcp_server, app.state.mcp_http = create_mcp()
+        app.state.mcp_endpoint.app = app.state.mcp_http
+
+        async with app.state.mcp_http.router.lifespan_context(app.state.mcp_http):
+            yield
 
     finally:
         await engine.dispose()
@@ -34,6 +43,13 @@ async def lifespan(_):
 
 def create_app():
     app = FastAPI(lifespan=lifespan, title="Companion Calendar API")
+    app.state.mcp_server, app.state.mcp_http = create_mcp()
+    mcp_endpoint = LocalOnlyMCP(app.state.mcp_http)
+    app.state.mcp_endpoint = mcp_endpoint
+    app.router.routes.extend([
+        Route("/mcp", endpoint=mcp_endpoint),
+        Route("/mcp/", endpoint=mcp_endpoint)
+    ])
 
     register_error_handlers(app)
 
@@ -57,6 +73,7 @@ app = create_app()
 if __name__ == "__main__":
     uvicorn.run(
         app,
-        host="0.0.0.0",
-        port=settings.port
+        host="127.0.0.1",
+        port=settings.port,
+        proxy_headers=False
     )

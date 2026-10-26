@@ -200,5 +200,5 @@ class TasksAPI(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(diff,[])
         finally:
             await engine.dispose()
-        await asyncio.to_thread(command.downgrade,config,"e3f9b5c02871")
+        await asyncio.to_thread(command.downgrade,config,"base")
         await asyncio.to_thread(command.upgrade,config,"head")

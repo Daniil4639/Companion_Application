@@ -7,7 +7,6 @@ import unittest
 from datetime import datetime, UTC
 from pathlib import Path
 from uuid import UUID, uuid4
-from types import SimpleNamespace
 from unittest.mock import patch
 import httpx
 from sqlalchemy import select, func, text
@@ -334,14 +333,6 @@ class MigrationTests(unittest.TestCase):
         return asyncio.run(run())
 
 
-    def seed_legacy(self):
-        command.upgrade(self.config, "c1daa961f302")
-        self.sql(lambda conn: conn.execute(text(
-            "INSERT INTO event_series (id,title,start_at,finish_at,timezone,created_at,updated_at) "
-            "VALUES ('11111111111111111111111111111111','Legacy','2026-10-22 09:00:00',"
-            "'2026-10-22 10:00:00','Europe/Moscow','2026-10-21 12:00:00','2026-10-21 12:00:00')")))
-
-
     def test_clean_upgrade_metadata_and_downgrade(self):
         command.upgrade(self.config, "head")
         differences = self.sql(lambda conn: compare_metadata(MigrationContext.configure(conn,
@@ -352,83 +343,26 @@ class MigrationTests(unittest.TestCase):
             "SELECT name FROM sqlite_master WHERE type='table' AND name='event_series'")).fetchall()), [])
 
 
-    def test_legacy_refuses_guess_and_rolls_back(self):
-        self.seed_legacy()
-        with self.assertRaisesRegex(RuntimeError, "unknown timezone"):
-            command.upgrade(self.config, "head")
-        self.assertEqual(self.sql(lambda conn: conn.scalar(text("SELECT version_num FROM alembic_version"))),
-                         "c1daa961f302")
-        self.assertEqual(self.sql(lambda conn: conn.scalar(text("SELECT start_at FROM event_series"))),
-                         "2026-10-22 09:00:00")
-
-
-    def test_legacy_explicit_conversion_and_downgrade_guard(self):
-        self.seed_legacy()
-        self.config.cmd_opts = SimpleNamespace(x=["legacy_time_policy=event_timezone",
-                                                  "legacy_audit_timezone=Europe/Moscow"])
-        command.upgrade(self.config, "head")
-        self.assertEqual(self.sql(lambda conn: conn.scalar(text("SELECT start_at FROM event_series"))),
-                         "2026-10-22 06:00:00.000000")
-        with self.assertRaisesRegex(RuntimeError, "unsafe"):
-            command.downgrade(self.config, "c1daa961f302")
-        self.assertEqual(self.sql(lambda conn: conn.scalar(text("SELECT version_num FROM alembic_version"))),
-                         ScriptDirectory.from_config(self.config).get_current_head())
-
-
     def test_settings_paths_are_stable(self):
         with patch.dict(os.environ, {"DATABASE_URL": "sqlite+aiosqlite:///relative.db"}):
             settings = Settings()
         self.assertEqual(settings.database_url, "sqlite+aiosqlite:///" + (PROJECT_ROOT / "relative.db").as_posix())
 
 
-    def test_populated_rules_and_exceptions_keep_links(self):
-        self.seed_legacy()
-        def seed(conn):
-            conn.execute(text("INSERT INTO recurrence_rules (id,frequency,interval,until) VALUES "
-                              "('22222222222222222222222222222222','DAILY',1,'2026-10-24 09:00:00')"))
-            conn.execute(text("UPDATE event_series SET recurrence_rule_id='22222222222222222222222222222222'"))
-            conn.execute(text("INSERT INTO event_exceptions "
-                "(id,event_series_id,original_start_at,status,start_at,finish_at,created_at,updated_at) VALUES "
-                "('33333333333333333333333333333333','11111111111111111111111111111111',"
-                "'2026-10-22 09:00:00','MODIFIED','2026-10-27 11:00:00','2026-10-27 12:00:00',"
-                "'2026-10-21 12:00:00','2026-10-21 12:00:00')"))
-        self.sql(seed)
-        self.config.cmd_opts = SimpleNamespace(x=["legacy_time_policy=event_timezone", "legacy_audit_timezone=Europe/Moscow"])
+    def test_current_baseline_upgrade_preserves_populated_data(self):
+        # Historical conversion revisions were replaced by the single initial migration.
         command.upgrade(self.config, "head")
-        self.assertEqual(self.sql(lambda conn: conn.scalar(text("SELECT until FROM recurrence_rules"))),
-                         "2026-10-24 06:00:00.000000")
-        self.assertEqual(self.sql(lambda conn: conn.scalar(text("SELECT start_at FROM event_exceptions"))),
-                         "2026-10-27 08:00:00.000000")
-        self.assertEqual(self.sql(lambda conn: conn.execute(text("PRAGMA foreign_key_check")).fetchall()), [])
-
-
-    def test_migration_failure_rolls_back_converted_values(self):
-        self.seed_legacy()
-        self.sql(lambda conn: conn.execute(text("UPDATE event_series SET title='   '")))
-        self.config.cmd_opts = SimpleNamespace(x=["legacy_time_policy=event_timezone", "legacy_audit_timezone=Europe/Moscow"])
-        with self.assertRaises(IntegrityError):
-            command.upgrade(self.config, "head")
-        self.assertEqual(self.sql(lambda conn: conn.scalar(text("SELECT start_at FROM event_series"))),
-                         "2026-10-22 09:00:00")
-        self.assertEqual(self.sql(lambda conn: conn.scalar(text("SELECT version_num FROM alembic_version"))),
-                         "c1daa961f302")
-
-
-    def test_legacy_utc_policy_does_not_shift_dates(self):
-        self.seed_legacy()
-        self.config.cmd_opts = SimpleNamespace(x=["legacy_time_policy=utc"])
-        command.upgrade(self.config, "head")
-        self.assertEqual(self.sql(lambda conn: conn.scalar(text("SELECT start_at FROM event_series"))),
-                         "2026-10-22 09:00:00.000000")
-
-
-    def test_ambiguous_legacy_datetime_is_rejected(self):
-        self.seed_legacy()
         self.sql(lambda conn: conn.execute(text(
-            "UPDATE event_series SET timezone='Europe/Berlin',start_at='2026-10-25 02:30:00',finish_at='2026-10-25 03:30:00'")))
-        self.config.cmd_opts = SimpleNamespace(x=["legacy_time_policy=event_timezone", "legacy_audit_timezone=Europe/Moscow"])
-        with self.assertRaisesRegex(RuntimeError, "ambiguous"):
-            command.upgrade(self.config, "head")
+            "INSERT INTO event_series (id,title,start_at,finish_at,timezone,created_at,updated_at) "
+            "VALUES ('11111111111111111111111111111111','Existing','2026-10-22 06:00:00',"
+            "'2026-10-22 07:00:00','Europe/Moscow','2026-10-21 09:00:00','2026-10-21 09:00:00')")))
+        command.upgrade(self.config, "head")
+        self.assertEqual(self.sql(lambda conn: conn.scalar(text("SELECT title FROM event_series"))), "Existing")
+        self.assertEqual(self.sql(lambda conn: conn.scalar(text("SELECT start_at FROM event_series"))),
+                         "2026-10-22 06:00:00")
+        self.assertEqual(self.sql(lambda conn: conn.execute(text("PRAGMA foreign_key_check")).fetchall()), [])
+        self.assertEqual(self.sql(lambda conn: conn.scalar(text("SELECT version_num FROM alembic_version"))),
+                         ScriptDirectory.from_config(self.config).get_current_head())
 
 
 class PersistenceAndConcurrencyTests(unittest.IsolatedAsyncioTestCase):
