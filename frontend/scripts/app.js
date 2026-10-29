@@ -176,6 +176,10 @@
         }
         if (page === 'events') loadSeries();
         if (page === 'tasks') CompanionTasks.load();
+        if (page === 'settings') {
+            CompanionMCPSettings.load();
+            CompanionLLMSettings.load();
+        }
     }
 
     function syncMini() {

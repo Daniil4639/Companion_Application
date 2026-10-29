@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="../styles/dialog.css">
     <link rel="stylesheet" href="../styles/profile.css">
     <link rel="stylesheet" href="../styles/tasks.css">
+    <link rel="stylesheet" href="../styles/settings.css">
     <script defer src="../scripts/timezone.js"></script>
     <script defer src="../scripts/profile.js"></script>
     <script defer src="../scripts/calendar-core.js"></script>
@@ -19,6 +20,10 @@
     <script defer src="../scripts/tasks-api.js"></script>
     <script defer src="../scripts/task-dialog.js"></script>
     <script defer src="../scripts/tasks.js"></script>
+    <script defer src="../scripts/mcp-api.js"></script>
+    <script defer src="../scripts/mcp-settings.js"></script>
+    <script defer src="../scripts/llm-api.js"></script>
+    <script defer src="../scripts/llm-settings.js"></script>
     <script defer src="../scripts/app.js"></script>
 </head>
 <body class="journal-collapsed">
@@ -118,7 +123,15 @@
             <button class="button load-more" id="load-more" hidden>Показать ещё</button>
         </section>
         <section class="settings-page" id="settings-page" hidden aria-label="Настройки">
-            <article class="settings-card"><h2>Ваш профиль</h2>
+            <nav class="settings-shortcuts" aria-label="Разделы настроек">
+                <button type="button" data-section="settings-profile" aria-current="location"><span>01</span>Профиль
+                </button>
+                <button type="button" data-section="settings-rhythm"><span>02</span>Ритм</button>
+                <button type="button" data-section="settings-plugins"><span>03</span>Плагины</button>
+                <button type="button" data-section="settings-llm"><span>04</span>Модели</button>
+            </nav>
+            <article class="settings-card" id="settings-profile" tabindex="-1" aria-labelledby="profile-heading"><h2
+                    id="profile-heading">Ваш профиль</h2>
                 <form id="profile-form" class="profile-form">
                     <label>Системное имя<input name="username" maxlength="64" required autocomplete="username"
                                                placeholder="Как вас зовут?"></label>
@@ -140,8 +153,9 @@
                     <button class="button primary" type="submit">Сохранить профиль</button>
                 </form>
             </article>
-            <article class="settings-card"><span class="setting-emblem" data-icon="sun"></span>
-                <h2>Ваш ритм</h2>
+            <article class="settings-card" id="settings-rhythm" tabindex="-1" aria-labelledby="rhythm-heading"><span
+                    class="setting-emblem" data-icon="sun"></span>
+                <h2 id="rhythm-heading">Ваш ритм</h2>
                 <p>Небольшие настройки, чтобы дневник был удобен именно вам.</p>
                 <label class="setting-row"><span><b>Плотность расписания</b><small>Высота одного часа в недельной сетке</small></span><select
                         id="density">
@@ -158,6 +172,35 @@
                 </select></label>
                 <div class="setting-row"><span><b>Часовой пояс</b><small>Текущий пояс календаря</small></span><span
                         class="timezone-value" id="settings-zone"></span></div>
+            </article>
+            <article class="settings-card plugins-card" id="settings-plugins" tabindex="-1"
+                     aria-labelledby="plugins-heading">
+                <div class="plugins-heading">
+                    <div><span class="eyebrow">ВОЗМОЖНОСТИ ДНЕВНИКА</span>
+                        <h2 id="plugins-heading">Ваши плагины</h2></div>
+                    <button class="button primary" id="plugin-add"><span data-icon="plus"></span>Добавить</button>
+                </div>
+                <p>Подключения к MCP-серверам. Здесь можно собрать инструменты, которые пригодятся вашим будущим
+                    чатам.</p>
+                <div class="plugins-toolbar"><span id="plugins-state" role="status">Список подключений</span>
+                    <button class="text-button" id="plugins-reload"><span data-icon="refresh"></span>Обновить</button>
+                </div>
+                <p class="form-error" id="plugins-error" role="alert" hidden></p>
+                <div id="plugins-list" aria-busy="false"></div>
+            </article>
+            <article class="settings-card plugins-card" id="settings-llm" tabindex="-1" aria-labelledby="llm-heading">
+                <div class="plugins-heading">
+                    <div><span class="eyebrow">ИНТЕЛЛЕКТУАЛЬНЫЕ ПОДКЛЮЧЕНИЯ</span>
+                        <h2 id="llm-heading">Провайдеры моделей</h2></div>
+                    <button class="button primary" id="llm-add"><span data-icon="plus"></span>Добавить</button>
+                </div>
+                <p>Сохраните подключения к OpenAI или Ollama. Модель для каждого чата можно будет выбирать в самом
+                    чате.</p>
+                <div class="plugins-toolbar"><span id="llm-state" role="status">Список подключений</span>
+                    <button class="text-button" id="llm-reload"><span data-icon="refresh"></span>Обновить</button>
+                </div>
+                <p class="form-error" id="llm-error" role="alert" hidden></p>
+                <div id="llm-list" aria-busy="false"></div>
             </article>
         </section>
     </main>
@@ -209,6 +252,12 @@
 </dialog>
 <dialog id="task-dialog" aria-labelledby="task-dialog-title">
     <div id="task-dialog-content"></div>
+</dialog>
+<dialog id="plugin-dialog" aria-labelledby="plugin-dialog-title">
+    <div id="plugin-dialog-content"></div>
+</dialog>
+<dialog id="llm-dialog" aria-labelledby="llm-dialog-title">
+    <div id="llm-dialog-content"></div>
 </dialog>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </body>

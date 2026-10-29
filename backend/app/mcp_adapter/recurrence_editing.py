@@ -13,7 +13,6 @@ def register_recurrence_editing(server):
     read = ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False)
     write = ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=False)
 
-
     @server.tool(annotations=write)
     async def schedule_update_recurrence(event_series_id: UUID, expected_version: Version,
                                          data: RecurrenceChange) -> RecurrenceResult:
@@ -24,7 +23,6 @@ def register_recurrence_editing(server):
         """
         async with mutation_session() as session:
             return await recurrence_editing.change_recurrence(event_series_id, expected_version, data, session)
-
 
     @server.tool(annotations=write)
     async def schedule_split_series(event_series_id: UUID, expected_version: Version,
@@ -37,7 +35,6 @@ def register_recurrence_editing(server):
         async with mutation_session() as session:
             return await recurrence_editing.change_recurrence(event_series_id, expected_version, data, session)
 
-
     @server.tool(annotations=write)
     async def schedule_restore_occurrence(event_series_id: UUID, original_start_at: datetime,
                                           expected_version: Version) -> RecurrenceResult:
@@ -47,7 +44,6 @@ def register_recurrence_editing(server):
         async with mutation_session() as session:
             return await recurrence_editing.restore_occurrence(event_series_id, original_start_at, expected_version,
                                                                session)
-
 
     @server.tool(annotations=read)
     async def schedule_preview_change(event_series_id: UUID, expected_version: Version,
@@ -60,7 +56,6 @@ def register_recurrence_editing(server):
         async with mutation_session() as session:
             return await recurrence_editing.preview_change(event_series_id, expected_version, data, range_start,
                                                            range_end, session)
-
 
     @server.tool(annotations=read)
     async def get_user_context() -> UserTimeContext:

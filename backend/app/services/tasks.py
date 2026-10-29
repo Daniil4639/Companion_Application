@@ -17,8 +17,10 @@ class TaskService:
     @staticmethod
     async def get(task_id, session):
         task = await session.get(Task, task_id)
+
         if task is None:
             raise TaskNotFound("Задача не найдена")
+
         return task
 
     @staticmethod
@@ -69,13 +71,16 @@ class TaskService:
     async def _reorder(self, task, status, position, session):
         source = await self._column(task.status, session)
         target = source if status == task.status else await self._column(status, session)
+
         source = [row for row in source if row.id != task.id]
         target = source if status == task.status else target
+
         target.insert(min(position, len(target)), task)
         columns = {status: target}
 
         if status != task.status:
             columns[task.status] = source
+
         rows = [row for column in columns.values() for row in column]
         original = {row.id: (row.status, row.position, row.updated_at) for row in rows}
 
@@ -90,8 +95,10 @@ class TaskService:
             for index, row in enumerate(column):
                 previous_status, previous_position, previous_updated = original[row.id]
                 row.status, row.position = column_status, index
+
                 if column_status != previous_status:
                     row.completed_at = now if column_status == "DONE" else None
+
                 row.updated_at = now if (column_status, index) != (previous_status,
                                                                    previous_position) else previous_updated
 
@@ -103,9 +110,11 @@ class TaskService:
         async with write_transaction(session, lock_model=Task):
             column = await self._column(data.status, session)
             values = data.model_dump(exclude={"position"})
+
             task = Task(**values, position=len(column),
                         completed_at=utc_now() if data.status == "DONE" else None)
             session.add(task)
+
             await session.flush()
             if data.position is not None:
                 await self._reorder(task, data.status, data.position, session)
@@ -118,13 +127,17 @@ class TaskService:
         async with write_transaction(session, lock_model=Task):
             task = await self.get(task_id, session)
             values = data.model_dump(exclude_unset=True)
+
             status = values.pop("status", task.status)
             position = values.pop("position", None)
+
             if status != task.status or position is not None:
                 target = await self._column(status, session)
                 await self._reorder(task, status, len(target) if position is None else position, session)
+
             for key, value in values.items():
                 setattr(task, key, value)
+
             task.updated_at = utc_now()
             await session.flush()
 

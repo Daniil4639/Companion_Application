@@ -45,6 +45,7 @@ def create_mcp():
         "Folliant",
         instructions="Manage local tasks and calendar. Use schedule_get for expected_version and schedule_preview_change before recurrence edits. Rule replacement/splitting require explicit exception policy if exceptions exist. Whole-series deletion is forbidden. Dates require UTC offsets. Writes persist immediately.",
     )
+
     # Reuse get_db's factory and guaranteed async-with cleanup for each tool call.
     session_context = asynccontextmanager(get_db)
     annotations = ToolAnnotations(readOnlyHint=True, destructiveHint=False,
@@ -52,9 +53,9 @@ def create_mcp():
 
     @server.tool(annotations=annotations)
     async def tasks_list(
-        status: TaskStatus | None = None,
-        limit: Annotated[int, Field(ge=1, le=500, strict=True)] = 100,
-        offset: Annotated[int, Field(ge=0, strict=True)] = 0,
+            status: TaskStatus | None = None,
+            limit: Annotated[int, Field(ge=1, le=500, strict=True)] = 100,
+            offset: Annotated[int, Field(ge=0, strict=True)] = 0,
     ) -> TasksResult:
         """List existing tasks, optionally by BACKLOG/TODO/IN_PROGRESS/DONE.
         Follow next_offset until null to read all tasks. Dates are YYYY-MM-DD, without a timezone.
@@ -63,7 +64,8 @@ def create_mcp():
             async with session_context() as session:
                 rows = await taskService.list(session, status=status, limit=limit, offset=offset)
                 # Probe using the same service and snapshot, without issuing SQL in the adapter.
-                more = await taskService.list(session, status=status, limit=1, offset=offset + len(rows)) if len(rows) == limit else []
+                more = await taskService.list(session, status=status, limit=1, offset=offset + len(rows)) if len(
+                    rows) == limit else []
                 return TasksResult(tasks=[TaskItem.model_validate(row) for row in rows],
                                    next_offset=offset + len(rows) if more else None)
         except InvalidTaskData as exc:

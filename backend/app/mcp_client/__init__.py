@@ -1,0 +1,1 @@
+"""MCP client runtime; importing this package opens no connections."""
