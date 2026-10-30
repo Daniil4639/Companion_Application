@@ -1,0 +1,37 @@
+from backend.app.llm.schemas import Message, ProviderError
+
+
+class TokenCounter:
+    """Conservative UTF-8 byte estimate; replaceable by a model-specific tokenizer."""
+
+    def count(self, message):
+        return len(message.text.encode("utf-8")) + 16
+
+
+class ContextBuilder:
+    def __init__(self, global_prompt, counter=None):
+        self.global_prompt = global_prompt
+        self.counter = counter or TokenCounter()
+
+    def build(self, settings, history, current):
+        system = "\n\n".join(p for p in (self.global_prompt, settings.system_prompt) if p)
+        mandatory = [Message(role="system", text=system)] if system else []
+        current = Message(role="user", text=current)
+        budget = settings.context_window_tokens - settings.max_output_tokens - 256
+        remaining = budget - sum(self.counter.count(m) for m in mandatory + [current])
+        if remaining < 0:
+            raise ProviderError("invalid_request",
+                                "Системные инструкции и сообщение не помещаются в контекст. Увеличьте лимит или сократите текст.")
+        pairs = []
+        for i in range(len(history) - 1):
+            a, b = history[i:i + 2]
+            if a.role == "user" and b.role == "assistant" and a.status == b.status == "completed":
+                pairs.append([Message(role=a.role, text=a.text), Message(role=b.role, text=b.text)])
+        chosen = []
+        for pair in reversed(pairs):
+            cost = sum(self.counter.count(m) for m in pair)
+            if cost > remaining:
+                break
+            remaining -= cost
+            chosen[0:0] = pair
+        return mandatory + chosen + [current]

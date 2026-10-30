@@ -144,22 +144,31 @@
     document.querySelectorAll('[data-page]').forEach(b => b.onclick = () => showPage(b.dataset.page));
     $('.brand').onclick = e => {
         e.preventDefault();
-        showPage('schedule');
+        showPage('chat');
     };
 
     function showPage(page) {
-        if (!['schedule', 'events', 'tasks', 'settings'].includes(page)) page = 'schedule';
+        if (!['schedule', 'events', 'tasks', 'settings', 'chat'].includes(page)) page = 'chat';
         storage.set('currentPage', page);
         state.page = page;
+        $('#workspace').classList.toggle('chat-workspace', page === 'chat');
+        $('.page-heading').hidden = page === 'chat';
         state.listGeneration++;
         document.querySelectorAll('[data-page]').forEach(b => {
             const active = b.dataset.page === page;
             b.classList.toggle('active', active);
             if (active) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
         });
-        for (const name of ['schedule', 'events', 'settings', 'tasks']) $('#' + name + '-page').hidden = name !== page;
-        const titles = {schedule: 'Расписание', events: 'Все события', settings: 'Настройки', tasks: 'Задачи'};
+        for (const name of ['schedule', 'events', 'settings', 'tasks', 'chat']) $('#' + name + '-page').hidden = name !== page;
+        const titles = {
+            schedule: 'Расписание',
+            events: 'Все события',
+            settings: 'Настройки',
+            tasks: 'Задачи',
+            chat: 'Чат'
+        };
         const subtitles = {
+            chat: 'Разговоры, к которым хочется вернуться.',
             schedule: 'Место для планов, встреч и маленьких радостей.',
             events: 'Всё, что вы доверили своему дневнику.',
             settings: 'Пусть дневник подстраивается под вас.',
@@ -168,7 +177,7 @@
         $('#page-title').innerHTML = E(titles[page]);
         $('#page-subtitle').textContent = subtitles[page];
         document.title = titles[page] + ' · Folliant';
-        $('#new-event').hidden = page === 'settings' || page === 'tasks';
+        $('#new-event').hidden = ['settings', 'tasks', 'chat'].includes(page);
         $('#reload-schedule').hidden = page !== 'schedule';
         if (page === 'schedule') {
             renderCalendar();
@@ -176,6 +185,7 @@
         }
         if (page === 'events') loadSeries();
         if (page === 'tasks') CompanionTasks.load();
+        if (page === 'chat') window.CompanionChat?.load();
         if (page === 'settings') {
             CompanionMCPSettings.load();
             CompanionLLMSettings.load();
@@ -486,7 +496,7 @@
         }
     }, 60000);
     renderToday();
-    showPage(storage.get('currentPage', 'schedule'));
+    showPage(storage.get('currentPage', 'chat'));
     if (state.page !== 'schedule') {
         renderCalendar();
         loadSchedule();

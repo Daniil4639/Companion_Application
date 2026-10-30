@@ -18,6 +18,10 @@ from backend.app.api.mcp_servers_router import mcp_servers_router
 from backend.app.services.mcp_servers import MCPServerService
 from backend.app.services.llm_providers import LLMProviderService
 from backend.app.api.llm_router import llm_router
+from backend.app.api.chat_router import chat_router
+from backend.app.services.chat import ChatService
+from backend.app.services.chat_context import ContextBuilder
+from backend.app.services.chat_generation import GenerationManager
 from backend.app.mcp_client.models import RuntimeFailure
 from starlette.routing import Route
 from backend.app.mcp_adapter.server import create_mcp
@@ -77,6 +81,11 @@ async def lifespan(app):
             app.state.mcp_catalog = catalog
             llm = LLMProviderService(database.async_session_fabric)
             app.state.llm_providers = llm
+            chat = ChatService(database.async_session_fabric)
+            await chat.recover()
+            generations = GenerationManager(chat, llm, ContextBuilder(settings.system_prompt))
+            app.state.chat_service = chat
+            app.state.chat_generations = generations
 
             app.state.mcp_clients = manager
             app.state.tool_registry = manager.registry
@@ -92,6 +101,7 @@ async def lifespan(app):
             finally:
                 discovery.cancel()
                 await asyncio.gather(discovery, return_exceptions=True)
+                await generations.aclose()
                 await llm.aclose()
                 await catalog.aclose()
                 await manager.aclose()
@@ -120,6 +130,7 @@ def create_app():
     app.include_router(tasks_router)
     app.include_router(mcp_servers_router)
     app.include_router(llm_router)
+    app.include_router(chat_router)
     app.include_router(frontend_router)
 
     for directory in ("styles", "scripts", "resources"):
@@ -129,6 +140,7 @@ def create_app():
 
 
 app = create_app()
+
 
 if __name__ == "__main__":
     uvicorn.run(

@@ -12,7 +12,7 @@ class OllamaProvider(ModelProvider):
         super().__init__(config)
         headers = {"Authorization": "Bearer " + config.api_key.get_secret_value()} if config.api_key else {}
         self.client = client or AsyncClient(host=config.base_url, headers=headers,
-            timeout=httpx.Timeout(config.timeout, connect=config.connect_timeout))
+                                            timeout=httpx.Timeout(config.timeout, connect=config.connect_timeout))
 
     def _payload(self, request):
         self.validate(request)
@@ -30,33 +30,41 @@ class OllamaProvider(ModelProvider):
                     raise ProviderError("invalid_request", "Ollama tool results must follow assistant call order")
                 item["tool_name"] = names[message.tool_call_id]
             if message.tool_calls:
-                item["tool_calls"] = [{"function": {"name": c.name, "arguments": c.arguments()}} for c in message.tool_calls]
+                item["tool_calls"] = [{"function": {"name": c.name, "arguments": c.arguments()}} for c in
+                                      message.tool_calls]
             messages.append(item)
         options = {}
+        if request.context_window_tokens is not None:
+            options["num_ctx"] = request.context_window_tokens
         if request.selection.temperature is not None:
             options["temperature"] = request.selection.temperature
         if request.selection.max_output_tokens is not None:
             options["num_predict"] = request.selection.max_output_tokens
         return {"model": request.selection.model, "messages": messages, "options": options,
                 "tools": [{"type": "function", "function": {"name": t.name, "description": t.description,
-                           "parameters": t.parameters}} for t in request.tools] or None}
+                                                            "parameters": t.parameters}} for t in
+                          request.tools] or None}
 
     def _normalize(self, raw, message, model):
         if not raw.get("done"):
             raise ProviderError("protocol_error", "Ollama stream ended before completion")
         calls = [ToolCall(id="ollama_" + uuid4().hex, name=c["function"]["name"],
-                         arguments_json=json.dumps(c["function"]["arguments"], ensure_ascii=False))
+                          arguments_json=json.dumps(c["function"]["arguments"], ensure_ascii=False))
                  for c in message.get("tool_calls", [])]
         continuation = Continuation(provider_id=self.config.id, kind="ollama", model=model,
                                     base_url=self.config.base_url, items=[message])
         return ModelResponse(provider_id=self.config.id, model=model,
-            message=Message(role="assistant", text=message.get("content", ""), tool_calls=calls, continuation=continuation),
-            finish_reason="length" if raw.get("done_reason") == "length" else "tool_calls" if calls else "stop",
-            usage=Usage(input_tokens=raw.get("prompt_eval_count") or 0, output_tokens=raw.get("eval_count") or 0))
+                             message=Message(role="assistant", text=message.get("content", ""), tool_calls=calls,
+                                             continuation=continuation),
+                             finish_reason="length" if raw.get(
+                                 "done_reason") == "length" else "tool_calls" if calls else "stop",
+                             usage=Usage(input_tokens=raw.get("prompt_eval_count") or 0,
+                                         output_tokens=raw.get("eval_count") or 0))
 
     async def generate(self, request):
         async with self.operation():
-            raw = (await self.client.chat(**self._payload(request), stream=False)).model_dump(mode="json", exclude_none=True)
+            raw = (await self.client.chat(**self._payload(request), stream=False)).model_dump(mode="json",
+                                                                                              exclude_none=True)
             return self._normalize(raw, raw["message"], request.selection.model)
 
     async def stream(self, request):
@@ -90,7 +98,11 @@ class OllamaProvider(ModelProvider):
         async with self.operation():
             info = await self.client.show(model)
             capabilities = info.model_dump().get("capabilities")
-            return ModelInfo(id=model, tools_supported="tools" in capabilities if capabilities is not None else None)
+            metadata = info.model_dump().get("modelinfo") or {}
+            context = next((v for k, v in metadata.items() if k.endswith(".context_length") and isinstance(v, int)),
+                           None)
+            return ModelInfo(id=model, context_window_tokens=context,
+                             tools_supported="tools" in capabilities if capabilities is not None else None)
 
     async def _close_client(self):
         # Official ollama 0.6.3 has no public aclose; isolate this version-specific access here.

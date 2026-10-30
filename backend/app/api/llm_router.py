@@ -56,6 +56,14 @@ async def active(s=Depends(service)):
     return await s.active()
 
 
+@llm_router.get("/providers/{provider_id}/model-info", response_model=ModelInfo)
+async def model_info(provider_id: str, model: str, s=Depends(service)):
+    async with s.provider(provider_id) as provider:
+        if hasattr(provider, "model_info"):
+            return await provider.model_info(model)
+        return ModelInfo(id=model)
+
+
 @llm_router.put("/active", response_model=ModelSelection)
 async def select(data: ModelSelection, s=Depends(service)):
     return await s.select(data)

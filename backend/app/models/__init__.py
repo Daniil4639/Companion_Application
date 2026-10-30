@@ -5,6 +5,7 @@ from .user import User
 from .task import Task
 from .mcp_server import MCPServerRecord
 from .llm import LLMProviderRecord, LLMSelectionRecord
+from .chat import Conversation, ChatMessage, GenerationRun
 
 __all__ = [
     'EventSeries',

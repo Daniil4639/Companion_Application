@@ -94,6 +94,7 @@ class Message(Schema):
 
 
 class GenerationRequest(Schema):
+    context_window_tokens: int | None = Field(default=None, ge=1024, le=2000000)
     selection: ModelSelection
     messages: list[Message] = Field(min_length=1)
     tools: list[ToolDefinition] = Field(default_factory=list)
@@ -138,6 +139,7 @@ class StreamEvent(Schema):
 
 
 class ModelInfo(Schema):
+    context_window_tokens: int | None = None
     id: str
     tools_supported: bool | None = None
     streaming_supported: bool | None = None

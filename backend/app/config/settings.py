@@ -13,6 +13,8 @@ class Settings:
             load_dotenv(PROJECT_ROOT / ".env", override=False)
 
         self.port = int(os.getenv("APP_PORT", "8181"))
+        self.system_prompt = os.getenv("FOLLIANT_SYSTEM_PROMPT",
+                                       "Ты — Folliant, внимательный и мудрый помощник-наставник. Отвечай ясно, доброжелательно и честно.")
         if not 1 <= self.port <= 65535:
             raise ValueError("APP_PORT must be between 1 and 65535")
 

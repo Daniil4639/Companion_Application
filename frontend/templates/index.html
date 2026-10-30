@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="../styles/profile.css">
     <link rel="stylesheet" href="../styles/tasks.css">
     <link rel="stylesheet" href="../styles/settings.css">
+    <link rel="stylesheet" href="../styles/chat.css">
     <script defer src="../scripts/timezone.js"></script>
     <script defer src="../scripts/profile.js"></script>
     <script defer src="../scripts/calendar-core.js"></script>
@@ -25,17 +26,20 @@
     <script defer src="../scripts/llm-api.js"></script>
     <script defer src="../scripts/llm-settings.js"></script>
     <script defer src="../scripts/app.js"></script>
+    <script defer src="../scripts/chat.js"></script>
 </head>
 <body class="journal-collapsed">
 <a class="skip-link" href="#workspace">Перейти к расписанию</a>
 <div class="app-shell">
     <aside class="navigation" aria-label="Главная навигация">
-        <a class="brand" href="#schedule" aria-label="Folliant — расписание">
+        <a class="brand" href="#chat" aria-label="Folliant — чат">
             <img src="../resources/Icon.png" style="width: 45px; height: 45px; object-fit: contain">
             <span class="nav-copy"><b class="brand-name">Folliant</b><small>Личный дневник</small></span>
         </a>
         <div class="nav-divider"><span>ВАШЕ ПРОСТРАНСТВО</span></div>
         <nav>
+            <button class="nav-link" data-page="chat" title="Чат"><span data-icon="chat"></span><span class="nav-copy">Чат</span><i
+                    class="active-mark"></i></button>
             <button class="nav-link active" data-page="schedule" aria-current="page" title="Расписание">
                 <span data-icon="calendar"></span>
                 <span class="nav-copy">Расписание</span>
@@ -121,6 +125,39 @@
             </div>
             <div id="events-list"></div>
             <button class="button load-more" id="load-more" hidden>Показать ещё</button>
+        </section>
+        <section class="chat-page" id="chat-page" hidden aria-label="Чат">
+            <aside class="chat-sidebar" aria-label="Ваши разговоры">
+                <div class="chat-sidebar-heading"><span class="eyebrow">НА СТРАНИЦАХ FOLLIANT</span>
+                    <h2>Разговоры</h2>
+                    <button class="button primary" id="chat-new"><span data-icon="plus"></span>Новый чат</button>
+                </div>
+                <div class="chat-list-scroll">
+                    <div id="chat-list"></div>
+                    <button class="text-button" id="chat-more">Ещё диалоги</button>
+                </div>
+                <p class="chat-sidebar-note"><span data-icon="leaf"></span>Место для мыслей и открытий</p></aside>
+            <div class="chat-main">
+                <div class="chat-mascot-space" aria-hidden="true"></div>
+                <div class="chat-paper">
+                    <div class="chat-toolbar">
+                        <div><h2 id="chat-title">Ваш собеседник</h2><small id="chat-model"></small></div>
+                        <button class="button" id="chat-settings" disabled>Настройки чата</button>
+                    </div>
+                    <p id="chat-error" class="form-error" role="alert" hidden></p>
+                    <div id="chat-history">
+                        <button class="text-button" id="chat-older" hidden>Ранние сообщения</button>
+                        <div id="chat-messages"><p class="chat-empty">Создайте разговор и выберите модель.</p></div>
+                    </div>
+                    <div id="chat-status" role="status"></div>
+                    <form id="chat-compose"><textarea id="chat-input" rows="2" placeholder="Напишите сообщение…"
+                                                      aria-label="Сообщение" maxlength="200000" required
+                                                      disabled></textarea>
+                        <button class="button" id="chat-stop" type="button" hidden>Остановить</button>
+                        <button class="button primary" id="chat-send" disabled>Отправить</button>
+                    </form>
+                </div>
+            </div>
         </section>
         <section class="settings-page" id="settings-page" hidden aria-label="Настройки">
             <nav class="settings-shortcuts" aria-label="Разделы настроек">
@@ -256,6 +293,7 @@
 <dialog id="plugin-dialog" aria-labelledby="plugin-dialog-title">
     <div id="plugin-dialog-content"></div>
 </dialog>
+<dialog id="chat-dialog" aria-label="Настройки диалога"></dialog>
 <dialog id="llm-dialog" aria-labelledby="llm-dialog-title">
     <div id="llm-dialog-content"></div>
 </dialog>
