@@ -1,0 +1,77 @@
+
+.chat-message-tools {
+    display: grid;
+    gap: 7px;
+    margin: 12px 0 0;
+}
+
+.chat-tool {
+    min-width: 0;
+    padding: 9px 12px;
+    border: 1px solid #78836B65;
+    border-radius: 7px;
+    background: linear-gradient(100deg, #E2E7D680, #E8E8D966);
+    box-shadow: 0 2px 6px #4A392E0A;
+    font-size: 12px;
+}
+
+.chat-tool summary {
+    cursor: pointer;
+    color: #59664D;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.chat-tool[open] summary {
+    margin-bottom: 10px;
+}
+
+.chat-tool pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-height: 180px;
+    overflow: auto;
+    margin: 5px 0 10px;
+    padding: 9px 10px;
+    border: 1px solid #78836B24;
+    border-radius: 5px;
+    background: #F7F4E9B8;
+    color: #4A392E;
+    font: 11px/1.55 ui-monospace, Consolas, monospace;
+}
+
+.chat-tool-label {
+    display: block;
+    color: #78836B;
+    font-size: 10px;
+    letter-spacing: .25px;
+    text-transform: uppercase;
+}
+
+.chat-tool-actions {
+    display: flex;
+    gap: 7px;
+    margin-top: 8px;
+}
+
+.chat-tool-actions .button {
+    min-height: 32px;
+    padding: 6px 10px;
+}
+
+.chat-mcp-selection {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    margin-top: 18px;
+    padding: 12px;
+}
+
+.chat-mcp-selection label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.chat-mcp-selection input {
+    width: auto;
+}

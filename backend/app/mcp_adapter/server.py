@@ -14,6 +14,7 @@ from backend.app.config import settings
 from backend.app.mcp_adapter.mutations import register_mutations
 from backend.app.mcp_adapter.calendar_editing import register_calendar_editing
 from backend.app.mcp_adapter.recurrence_editing import register_recurrence_editing
+from backend.app.mcp_adapter.chat_reading import register_chat_tools
 from backend.app.dto.tasks import TaskStatus, TaskPriority
 from backend.app.dto.schedule import ScheduleOccurrenceResponse
 from backend.app.services.tasks import taskService, InvalidTaskData
@@ -96,6 +97,7 @@ def create_mcp():
     register_mutations(server)
     register_calendar_editing(server)
     register_recurrence_editing(server)
+    register_chat_tools(server)
 
     http_app = server.streamable_http_app(
         streamable_http_path="/mcp",

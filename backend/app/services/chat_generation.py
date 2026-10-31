@@ -1,5 +1,4 @@
 import asyncio
-import logging
 from contextlib import aclosing
 from backend.app.llm.schemas import GenerationRequest, ModelSelection, ProviderError
 from backend.app.config import character_helper_logger
@@ -8,7 +7,9 @@ from backend.app.config import character_helper_logger
 class GenerationManager:
     """One process/worker. SSE observes snapshots; it never owns the producer task."""
 
-    def __init__(self, service, providers, builder):
+    def __init__(self, service, providers, builder, agent=None, summaries=None):
+        self.summaries = summaries
+        self.agent = agent
         self.service, self.providers, self.builder = service, providers, builder
         self.tasks, self.progress = {}, {}
         self.lock = asyncio.Lock()
@@ -33,7 +34,9 @@ class GenerationManager:
         async def checkpoint_loop():
             while True:
                 await asyncio.sleep(3)
-                await self.service.checkpoint(id, state["text"], "running")
+                await self.service.checkpoint(id, state["text"], "running",
+                                              answer_complete=state.get("answer_complete", False),
+                                              phase=state.get("phase"))
 
         timer = None
         try:
@@ -44,6 +47,11 @@ class GenerationManager:
                                                                  max_output_tokens=settings["max_output_tokens"]),
                                         messages=messages, context_window_tokens=settings["context_window_tokens"])
             async with self.providers.provider(settings["provider_id"]) as provider:
+                if self.agent:
+                    await self.agent.run(id, settings, request, provider, state)
+                    await self._after_answer(run, provider, state)
+                    state["status"] = "completed"
+                    return
                 complete = False
                 async with aclosing(provider.stream(request)) as stream:
                     async for event in stream:
@@ -60,6 +68,7 @@ class GenerationManager:
                                 state["error"] = "Ответ достиг лимита токенов"
                 if not complete:
                     raise ProviderError("protocol_error", "Поток завершился без подтверждения ответа")
+                await self._after_answer(run, provider, state)
             state["status"] = "completed"
         except asyncio.CancelledError:
             state["status"] = "interrupted" if self.closing else "cancelled"
@@ -72,7 +81,9 @@ class GenerationManager:
                 timer.cancel()
                 await asyncio.gather(timer, return_exceptions=True)
             try:
-                await self.service.checkpoint(id, state["text"], state["status"], state["error"])
+                await self.service.checkpoint(id, state["text"], state["status"], state["error"],
+                                              answer_complete=state.get("answer_complete", False),
+                                              phase=state.get("phase"))
             except Exception:
                 character_helper_logger.exception("Chat final checkpoint failed")
                 # Keep the in-memory snapshot; startup recovery handles unfinished DB state.
@@ -80,8 +91,20 @@ class GenerationManager:
                 self.progress.pop(id, None)
             self.tasks.pop(id, None)
 
+    async def _after_answer(self, run, provider, state):
+        state["answer_complete"] = True
+        await self.service.checkpoint(run["id"], state["text"], "running", answer_complete=True)
+        if self.summaries:
+            try:
+                await self.summaries.after_answer(run["conversation_id"], provider, state,
+                                                  state.get("tool_schema_bytes", 0))
+            except Exception:
+                state["error"] = "Ответ сохранён. Сжатие истории не удалось; предыдущая сводка сохранена."
+
     async def snapshot(self, id):
         saved = await self.service.snapshot(id)
+        if self.agent:
+            saved["tools"] = await self.agent.store.list(id)
         return {**saved, **self.progress.get(id, {})}
 
     async def cancel(self, id):

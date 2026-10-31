@@ -75,8 +75,8 @@ class MCPIntegration(unittest.IsolatedAsyncioTestCase):
             before = (await rest.get("/api/tasks")).json()
             async with Client(base + "/mcp") as client:
                 tools = (await client.list_tools()).tools
-                self.assertEqual({t.name for t in tools}, {"tasks_list", "schedule_list", "tasks_create", "tasks_update", "tasks_move", "tasks_complete", "schedule_create", "schedule_get", "schedule_update", "schedule_reschedule", "schedule_update_occurrence", "schedule_delete", "schedule_update_recurrence", "schedule_split_series", "schedule_restore_occurrence", "get_user_context", "schedule_preview_change"})
-                self.assertEqual({t.name for t in tools if t.annotations.read_only_hint}, {"tasks_list", "schedule_list", "schedule_get", "get_user_context", "schedule_preview_change"})
+                self.assertEqual({t.name for t in tools}, {"tasks_list", "schedule_list", "tasks_create", "tasks_update", "tasks_move", "tasks_complete", "schedule_create", "schedule_get", "schedule_update", "schedule_reschedule", "schedule_update_occurrence", "schedule_delete", "schedule_update_recurrence", "schedule_split_series", "schedule_restore_occurrence", "get_user_context", "schedule_preview_change", "chat_list", "chat_get_summary", "chat_read_messages"})
+                self.assertEqual({t.name for t in tools if t.annotations.read_only_hint}, {"tasks_list", "schedule_list", "schedule_get", "get_user_context", "schedule_preview_change", "chat_list", "chat_get_summary", "chat_read_messages"})
                 self.assertTrue(all(t.annotations.destructive_hint and t.annotations.idempotent_hint for t in tools if t.name in {"schedule_update", "schedule_reschedule", "schedule_update_occurrence", "schedule_delete"}))
                 first = await client.call_tool("tasks_list", {"status": "TODO", "limit": 1})
                 self.assertFalse(first.is_error, first)
@@ -94,7 +94,7 @@ class MCPIntegration(unittest.IsolatedAsyncioTestCase):
             self.assertEqual((await rest.get("/api/tasks")).json(), before)
             await self.assert_connections_returned(engine)
             async with Client(base + "/mcp/", mode="legacy") as client:
-                self.assertEqual(len((await client.list_tools()).tools), 17)
+                self.assertEqual(len((await client.list_tools()).tools), 20)
 
     async def test_schedule_dst_exceptions_and_range_validation(self):
         async with self.running() as (_, engine, rest, base):

@@ -53,26 +53,114 @@
         $('#chat-error').hidden = true;
     }
 
+    const toolStates = {
+        waiting_approval: 'Ожидает подтверждения',
+        approved: 'Подтверждён',
+        running: 'Выполняется',
+        completed: 'Выполнен',
+        denied: 'Отклонён',
+        failed: 'Ошибка',
+        unknown: 'Результат неизвестен — проверьте данные',
+        cancelled: 'Отменён',
+        interrupted: 'Прерван'
+    };
+
+    function createToolCard(tool) {
+        const card = document.createElement('details');
+        card.className = 'chat-tool';
+        card.open = tool.status === 'waiting_approval';
+        const summary = document.createElement('summary');
+        summary.textContent = (tool.server_id ? tool.server_id + ' · ' : '') + tool.tool_name + ' — ' + (toolStates[tool.status] || tool.status);
+        card.append(summary);
+        const argsLabel = document.createElement('b');
+        argsLabel.className = 'chat-tool-label';
+        argsLabel.textContent = 'Аргументы';
+        card.append(argsLabel);
+        const args = document.createElement('pre');
+        args.textContent = JSON.stringify(tool.arguments ?? {}, null, 2);
+        card.append(args);
+        if (tool.result !== null && tool.result !== undefined) {
+            const resultLabel = document.createElement('b');
+            resultLabel.className = 'chat-tool-label';
+            resultLabel.textContent = 'Результат';
+            card.append(resultLabel);
+            const result = document.createElement('pre');
+            result.textContent = typeof tool.result === 'string' ? tool.result : JSON.stringify(tool.result, null, 2);
+            card.append(result);
+        }
+        if (tool.status === 'waiting_approval' && ['pending', 'running'].includes(tool.run_status)) {
+            const actions = document.createElement('div');
+            actions.className = 'chat-tool-actions';
+            for (const [text, approve] of [['Разрешить', true], ['Отклонить', false]]) {
+                const button = document.createElement('button');
+                button.className = 'button' + (approve ? ' primary' : '');
+                button.textContent = text;
+                button.onclick = async () => {
+                    actions.querySelectorAll('button').forEach(b => b.disabled = true);
+                    try {
+                        await api('chats/runs/' + tool.run_id + '/tools/' + tool.id + '/decision', 'POST', {approve});
+                    } catch (error) {
+                        report(error);
+                        actions.querySelectorAll('button').forEach(b => b.disabled = false)
+                    }
+                };
+                actions.append(button);
+            }
+            card.append(actions);
+        }
+        return card;
+    }
+
+    function renderTools(data) {
+        const message = messages.find(m => m.id === data.assistant_message_id);
+        if (message) message.tool_executions = (data.tools || []).map(tool => ({...tool, run_status: data.status}));
+    }
+
     function renderList() {
         $('#chat-list').replaceChildren();
-        for (const c of records) {
-            const b = document.createElement('button');
-            b.className = 'chat-list-item' + (selected?.id === c.id ? ' active' : '');
-            b.innerHTML = '<span class="chat-list-icon">' + CompanionIcons.icon('chat') + '</span><span class="chat-list-copy"><b>' + E(c.title) + '</b><small>' + E(c.model) + '</small></span>';
-            b.onclick = () => open(c.id).catch(report);
-            if (selected?.id === c.id) b.setAttribute('aria-current', 'true');
-            $('#chat-list').append(b);
-            const measure = () => {
-                const copy = b.querySelector('.chat-list-copy');
-                for (const el of copy.children) {
-                    const distance = Math.max(0, el.scrollWidth - copy.clientWidth);
-                    el.style.setProperty('--travel', -distance + 'px');
-                    el.style.setProperty('--duration', Math.max(3, distance / 30) + 's');
-                    el.classList.toggle('overflows', distance > 0)
-                }
-            };
-            b.addEventListener('pointerenter', measure);
-            b.addEventListener('focus', measure);
+        const groups = new Map([['today', {label: 'Сегодня', items: []}], ['yesterday', {
+            label: 'Вчера',
+            items: []
+        }], ['week', {label: 'На этой неделе', items: []}], ['older', {label: 'Ранее', items: []}]]);
+        const now = new Date(), today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const monday = new Date(today);
+        monday.setDate(monday.getDate() - (monday.getDay() + 6) % 7);
+        for (const chat of records) {
+            const stamp = new Date(chat.updated_at || chat.created_at),
+                day = new Date(stamp.getFullYear(), stamp.getMonth(), stamp.getDate());
+            const key = day >= today ? 'today' : day >= yesterday ? 'yesterday' : day >= monday ? 'week' : 'older';
+            groups.get(key).items.push(chat);
+        }
+        for (const group of groups.values()) {
+            if (!group.items.length) continue;
+            const heading = document.createElement('h3');
+            heading.className = 'chat-list-group';
+            heading.textContent = group.label;
+            $('#chat-list').append(heading);
+            const section = document.createElement('div');
+            section.className = 'chat-list-group-items';
+            $('#chat-list').append(section);
+            for (const c of group.items) {
+                const b = document.createElement('button');
+                b.className = 'chat-list-item' + (selected?.id === c.id ? ' active' : '');
+                b.innerHTML = '<span class="chat-list-icon">' + CompanionIcons.icon('chat') + '</span><span class="chat-list-copy"><b>' + E(c.title) + '</b><small>' + E(c.model) + '</small></span>';
+                b.onclick = () => open(c.id).catch(report);
+                if (selected?.id === c.id) b.setAttribute('aria-current', 'true');
+                section.append(b);
+                const measure = () => {
+                    const copy = b.querySelector('.chat-list-copy');
+                    for (const el of copy.children) {
+                        const distance = Math.max(0, el.scrollWidth - copy.clientWidth);
+                        el.style.setProperty('--travel', -distance + 'px');
+                        el.style.setProperty('--duration', Math.max(3, distance / 30) + 's');
+                        el.classList.toggle('overflows', distance > 0)
+                    }
+                };
+                b.addEventListener('pointerenter', measure);
+                b.addEventListener('focus', measure);
+            }
         }
     }
 
@@ -181,19 +269,145 @@
 
     function renderMessages() {
         const box = $('#chat-history'), near = box.scrollHeight - box.scrollTop - box.clientHeight < 90;
-        $('#chat-messages').innerHTML = messages.map(m => '<article class="chat-message ' + (m.role === 'user' ? 'user' : 'assistant') + '"><span class="chat-avatar" aria-hidden="true">' + CompanionIcons.icon(m.role === 'user' ? 'user' : 'spark') + '</span><div class="chat-message-content"><header><b>' + (m.role === 'user' ? 'Вы' : 'Folliant') + '</b><span>' + E(m.status === 'completed' ? '' : labels[m.status] || m.status) + '</span></header><div class="body">' + markdown(m.text) + '</div></div></article>').join('');
+        const container = $('#chat-messages');
+        container.replaceChildren();
+        for (const message of messages) {
+            const user = message.role === 'user', article = document.createElement('article');
+            article.className = 'chat-message ' + (user ? 'user' : 'assistant');
+            const avatar = document.createElement('span');
+            avatar.className = 'chat-avatar';
+            avatar.setAttribute('aria-hidden', 'true');
+            avatar.innerHTML = CompanionIcons.icon(user ? 'user' : 'spark');
+            const content = document.createElement('div');
+            content.className = 'chat-message-content';
+            const header = document.createElement('header'), author = document.createElement('b'),
+                state = document.createElement('span');
+            author.textContent = user ? 'Вы' : 'Folliant';
+            state.textContent = message.status === 'completed' ? '' : labels[message.status] || message.status;
+            header.append(author, state);
+            const body = document.createElement('div');
+            body.className = 'body';
+            body.innerHTML = markdown(message.text || '');
+            content.append(header, body);
+            const executions = message.tool_executions || [];
+            if (executions.length) {
+                const group = document.createElement('div');
+                group.className = 'chat-message-tools';
+                executions.forEach(tool => group.append(createToolCard(tool)));
+                content.append(group);
+            }
+            article.append(avatar, content);
+            container.append(article);
+        }
         $('#chat-older').hidden = before === null;
         if (near) box.scrollTop = box.scrollHeight;
     }
 
+    let busyProvider = null, checkingAvailability = false;
+
+    async function checkAvailability() {
+        if (checkingAvailability || !selected || $('#chat-page').hidden || CompanionAPI.preview) return;
+        checkingAvailability = true;
+        const id = selected.id;
+        try {
+            const rows = await api('chats/provider-availability');
+            if (selected?.id !== id) return;
+            busyProvider = rows.find(row => row.provider_id === selected.provider_id && row.conversation_id !== id) || null;
+            controls();
+        } catch {
+        } finally {
+            checkingAvailability = false;
+        }
+    }
+
+    setInterval(checkAvailability, 2000);
+
     function controls() {
         resizeInput();
-        const running = !!activeRun || sending;
+        const running = !!activeRun || sending || !!busyProvider;
         $('#chat-input').disabled = !selected || running || !selected.provider_id;
         $('#chat-send').disabled = !selected || running || !selected.provider_id;
         $('#chat-stop').hidden = !activeRun;
         $('#chat-settings').disabled = !selected || running;
+        $('#chat-mcp-open').disabled = !selected || running;
+        updateMcpCount();
+        let notice = $('#chat-provider-busy');
+        if (!notice) {
+            notice = document.createElement('p');
+            notice.id = 'chat-provider-busy';
+            notice.className = 'form-hint';
+            $('#chat-compose').before(notice);
+        }
+        notice.hidden = !busyProvider;
+        notice.textContent = busyProvider ? 'Провайдер занят в другом чате. Отправка станет доступна после завершения.' : '';
     }
+
+    function updateMcpCount() {
+        const count = selected?.mcp_servers?.length || 0;
+        $('#chat-mcp-count').textContent = count + ' MCP';
+    }
+
+    async function editMcpConnections() {
+        if (!selected || activeRun || sending || busyProvider) return;
+        const dialog = $('#chat-mcp-dialog');
+        const chatId = selected.id;
+        const servers = await api('mcp/servers');
+        const toolsByServer = await Promise.all(servers.map(s => api('mcp/servers/' + encodeURIComponent(s.id) + '/tools').catch(() => [])));
+        if (!selected || selected.id !== chatId) return;
+        const selectedIds = new Set(selected.mcp_servers || []);
+        const sorted = servers.map((server, index) => ({server, tools: toolsByServer[index] || []}))
+            .sort((a, b) => Number(b.server.is_internal) - Number(a.server.is_internal) || a.server.name.localeCompare(b.server.name, 'ru'));
+        dialog.innerHTML = '<div class="chat-mcp-panel"><header><div><h2>Инструменты чата</h2><p>Выберите подключения, которыми помощник сможет пользоваться в этом разговоре.</p></div><span class="chat-mcp-badge"></span></header><div class="chat-mcp-rows"></div><p class="chat-mcp-note">Изменения данных через инструменты требуют вашего подтверждения.</p><div class="dialog-actions"><button class="button" type="button" data-dismiss>Отмена</button><button class="button primary" type="button" data-save>Сохранить</button></div></div>';
+        const rows = dialog.querySelector('.chat-mcp-rows');
+        if (!sorted.length) rows.innerHTML = '<p class="chat-mcp-empty">Нет доступных MCP-подключений. Добавьте их в настройках приложения.</p>';
+        for (const {server, tools} of sorted) {
+            const row = document.createElement('label');
+            row.className = 'chat-mcp-row';
+            const copy = document.createElement('span');
+            copy.className = 'chat-mcp-row-copy';
+            const name = document.createElement('b');
+            name.textContent = server.name;
+            const info = document.createElement('small');
+            info.textContent = (server.is_internal ? 'Внутренний плагин · ' : '') + (tools.length ? tools.length + ' инструментов' : 'Подключение недоступно');
+            copy.append(name, info);
+            const check = document.createElement('input');
+            check.type = 'checkbox';
+            check.value = server.id;
+            check.checked = selectedIds.has(server.id);
+            row.append(copy, check);
+            rows.append(row);
+        }
+        const badge = dialog.querySelector('.chat-mcp-badge');
+        const refreshBadge = () => badge.textContent = rows.querySelectorAll('input:checked').length + ' активно';
+        rows.addEventListener('change', refreshBadge);
+        refreshBadge();
+        dialog.querySelector('[data-dismiss]').onclick = () => dialog.close();
+        dialog.querySelector('[data-save]').onclick = async event => {
+            const button = event.currentTarget;
+            button.disabled = true;
+            try {
+                const latest = await api('chats/' + chatId);
+                const mcp_servers = [...rows.querySelectorAll('input:checked')].map(input => input.value);
+                const payload = {
+                    title: latest.title, provider_id: latest.provider_id, model: latest.model,
+                    context_window_tokens: latest.context_window_tokens, max_output_tokens: latest.max_output_tokens,
+                    system_prompt: latest.system_prompt, mcp_servers
+                };
+                const saved = await api('chats/' + chatId, 'PUT', payload);
+                if (selected?.id === chatId) {
+                    selected = saved;
+                    updateMcpCount();
+                }
+                dialog.close();
+            } catch (error) {
+                report(error);
+                button.disabled = false;
+            }
+        };
+        dialog.showModal();
+    }
+
+    $('#chat-mcp-open').onclick = () => editMcpConnections().catch(report);
 
     function observe(run) {
         source?.close();
@@ -210,8 +424,15 @@
                 msg = {id: data.assistant_message_id, role: 'assistant', position: data.position};
                 messages.push(msg)
             }
-            Object.assign(msg, {text: data.text, status: data.status});
-            $('#chat-status').textContent = labels[data.status] + (data.error ? ' · ' + data.error : '');
+            Object.assign(msg, {text: data.text, status: data.answer_complete ? 'completed' : data.status});
+            const phases = {
+                generating: 'Пишет ответ…',
+                waiting_approval: 'Ожидает вашего решения',
+                tool_running: 'Выполняет MCP-инструмент',
+                summarizing: 'Сжимаю историю…'
+            };
+            $('#chat-status').textContent = (data.status === 'running' ? phases[data.phase] || labels[data.status] : labels[data.status]) + (data.error ? ' · ' + data.error : '');
+            renderTools(data);
             renderMessages();
             if (!['pending', 'running'].includes(data.status)) {
                 connection.close();
@@ -235,6 +456,8 @@
         const [c, history, run] = await Promise.all([api('chats/' + id), api('chats/' + id + '/messages'), api('chats/' + id + '/run')]);
         if (token !== revision) return;
         selected = c;
+        busyProvider = null;
+        checkAvailability();
         messages = history.items;
         before = history.next_before;
         pending = null;
@@ -267,7 +490,7 @@
     $('#chat-more').onclick = () => load(true);
     $('#chat-compose').onsubmit = async event => {
         event.preventDefault();
-        if (!selected || activeRun || sending) return;
+        if (!selected || activeRun || sending || busyProvider) return;
         const text = $('#chat-input').value;
         if (!text.trim()) return;
         if (!pending || pending.text !== text) pending = {text, request_id: crypto.randomUUID()};
@@ -383,6 +606,7 @@
         form.onsubmit = e => {
             e.preventDefault();
             const data = Object.fromEntries(new FormData(form));
+            data.mcp_servers = v.mcp_servers || [];
             data.context_window_tokens = +data.context_window_tokens;
             data.max_output_tokens = +data.max_output_tokens;
             action(async () => {

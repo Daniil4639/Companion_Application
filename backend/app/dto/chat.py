@@ -3,6 +3,7 @@ from backend.app.llm.schemas import Schema
 
 
 class ChatSettings(Schema):
+    mcp_servers: list[str] = Field(default_factory=list, max_length=20)
     title: str = Field(default="Новый разговор", min_length=1, max_length=128)
     provider_id: str = Field(min_length=1, max_length=64)
     model: str = Field(min_length=1, max_length=255)
@@ -28,3 +29,7 @@ class SendMessage(Schema):
         if not self.text.strip():
             raise ValueError("Введите сообщение")
         return self
+
+
+class ToolDecision(Schema):
+    approve: bool

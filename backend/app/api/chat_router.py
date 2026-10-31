@@ -3,7 +3,7 @@ import json
 from fastapi import APIRouter, Depends, Request, Query, HTTPException
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import StreamingResponse, Response
-from backend.app.dto.chat import ChatSettings, SendMessage
+from backend.app.dto.chat import ChatSettings, SendMessage, ToolDecision
 from backend.app.mcp_adapter.security import local_request_allowed
 from backend.app.services.chat import ACTIVE
 
@@ -30,6 +30,11 @@ async def create(data: ChatSettings, pair=Depends(services)):
 @chat_router.get("/runs/{run_id}")
 async def run(run_id: str, pair=Depends(services)):
     return await pair[1].snapshot(run_id)
+
+
+@chat_router.get("/provider-availability")
+async def availability(pair=Depends(services)):
+    return await pair[0].busy_providers()
 
 
 @chat_router.post("/runs/{run_id}/cancel")
@@ -59,6 +64,13 @@ async def events(run_id: str, request: Request, pair=Depends(services)):
 
     return StreamingResponse(stream(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@chat_router.post("/runs/{run_id}/tools/{tool_id}/decision")
+async def decision(run_id: str, tool_id: str, data: ToolDecision, pair=Depends(services)):
+    if not pair[1].agent:
+        raise HTTPException(503, "Agent unavailable")
+    return await pair[1].agent.store.decision(run_id, tool_id, data.approve)
 
 
 @chat_router.get("/{id}")

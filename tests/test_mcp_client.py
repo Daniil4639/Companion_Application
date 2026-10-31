@@ -3,7 +3,6 @@ import os
 os.environ["COMPANION_LOAD_DOTENV"] = "0"
 
 import asyncio
-import json
 import socket
 import sys
 import unittest
@@ -60,7 +59,7 @@ class ClientIntegration(unittest.IsolatedAsyncioTestCase):
                                                  "finish_at": "2026-10-27T10:00:00+03:00", "timezone": "Europe/Moscow"})
             with self.assertLogs("character_helper", level="INFO") as logs:
                 await manager.connect("folliant")
-                self.assertEqual(len(manager.registry.list()), 17)
+                self.assertEqual(len(manager.registry.list()), 20)
                 self.assertEqual(manager.state("folliant"), "connected")
                 result = await executor.execute("folliant.tasks_list", {"status": "TODO"})
                 self.assertEqual(result.status, "success", result)

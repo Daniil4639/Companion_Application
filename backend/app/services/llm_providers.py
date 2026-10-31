@@ -19,6 +19,7 @@ class LLMProviderService:
         self._lock = asyncio.Lock()
         self._changes, self._users = set(), {}
         self._closing = False
+        self._provider_locks = {}
 
     @staticmethod
     def _view(record):
@@ -149,6 +150,13 @@ class LLMProviderService:
 
     @asynccontextmanager
     async def provider(self, provider_id):
+        lock = self._provider_locks.setdefault(provider_id, asyncio.Lock())
+        async with lock:
+            async with self._provider(provider_id) as adapter:
+                yield adapter
+
+    @asynccontextmanager
+    async def _provider(self, provider_id):
         if self._closing:
             raise ProviderError("closed", "Provider runtime is closing")
         task = asyncio.current_task()

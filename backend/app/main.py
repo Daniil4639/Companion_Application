@@ -22,6 +22,9 @@ from backend.app.api.chat_router import chat_router
 from backend.app.services.chat import ChatService
 from backend.app.services.chat_context import ContextBuilder
 from backend.app.services.chat_generation import GenerationManager
+from backend.app.services.agent_runner import AgentRunner
+from backend.app.services.agent_store import AgentStore
+from backend.app.services.conversation_summary import SummaryService
 from backend.app.mcp_client.models import RuntimeFailure
 from starlette.routing import Route
 from backend.app.mcp_adapter.server import create_mcp
@@ -83,13 +86,19 @@ async def lifespan(app):
             app.state.llm_providers = llm
             chat = ChatService(database.async_session_fabric)
             await chat.recover()
-            generations = GenerationManager(chat, llm, ContextBuilder(settings.system_prompt))
+            builder = ContextBuilder(
+                "\n\n".join((settings.system_prompt, settings.behavior_prompt, settings.tool_prompt)))
+            executor = ToolExecutor(manager)
+            agent = AgentRunner(manager, executor, AgentStore(database.async_session_fabric), builder,
+                                settings.max_agent_steps, settings.trusted_read_servers)
+            summaries = SummaryService(chat, builder, settings.summary_threshold, settings.summary_keep_exchanges)
+            generations = GenerationManager(chat, llm, builder, agent, summaries)
             app.state.chat_service = chat
             app.state.chat_generations = generations
 
             app.state.mcp_clients = manager
             app.state.tool_registry = manager.registry
-            app.state.tool_executor = ToolExecutor(manager)
+            app.state.tool_executor = executor
 
             discovery = asyncio.create_task(discover_connections(manager, records, settings.port),
                                             name="mcp-initial-discovery")
