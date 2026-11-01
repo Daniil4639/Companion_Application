@@ -1,9 +1,11 @@
 """Local single-worker chat persistence. Network calls never hold a DB session."""
 from uuid import uuid4
+import json
 from sqlalchemy import select
 from backend.app.models.chat import Conversation, ChatMessage, GenerationRun, ToolExecution, ConversationSummary
 from backend.app.models.mcp_server import MCPServerRecord
 from backend.app.models.llm import LLMProviderRecord
+from backend.app.models.user import User
 from backend.app.db.session import write_transaction
 from backend.app.utils.time import utc_now
 from backend.app.llm.schemas import ProviderError
@@ -194,7 +196,14 @@ class ChatService:
                 history = (await s.scalars(
                     select(ChatMessage).where(ChatMessage.conversation_id == id).order_by(ChatMessage.position))).all()
                 summary = await s.get(ConversationSummary, id)
-                context = builder.build(c, history, data.text, summary=summary)
+                user = await s.get(User, 1)
+                user_context = {
+                    "username": user.username if user else "",
+                    "display_name": user.display_name if user else None,
+                    "timezone": user.timezone if user else "UTC",
+                    "locale": user.locale if user else "ru-RU",
+                }
+                context = builder.build(c, history, data.text, summary=summary, user_context=user_context)
                 pos = history[-1].position + 1 if history else 0
                 user = ChatMessage(id=uuid4().hex, conversation_id=id, role="user", text=data.text,
                                    status="completed", position=pos, provider_id=c.provider_id, model=c.model)
