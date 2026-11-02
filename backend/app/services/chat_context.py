@@ -2,6 +2,16 @@ import json
 from backend.app.llm.schemas import Message, ProviderError
 
 
+def record_input_usage(state, response, request, counter):
+    """Keep the largest input context seen during a multi-step tool run."""
+    exact = response.usage.input_tokens
+    size = exact or max(1, (sum(counter.count(m) for m in request.messages) +
+                            len(json.dumps([t.model_dump() for t in request.tools], ensure_ascii=False).encode())) // 3)
+    if size > state.get("input_tokens", 0) or (size == state.get("input_tokens") and exact):
+        state["input_tokens"] = size
+        state["input_tokens_estimated"] = not bool(exact)
+
+
 class TokenCounter:
     """Conservative UTF-8 byte estimate; replaceable by a model-specific tokenizer."""
 

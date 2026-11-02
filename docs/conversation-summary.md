@@ -6,7 +6,7 @@ Configuration (ENV, restart required):
 - FOLLIANT_SUMMARY_THRESHOLD=0.75: estimated fraction of available input budget.
 - FOLLIANT_SUMMARY_KEEP_EXCHANGES=2: recent completed exchanges retained verbatim.
 
-The estimate includes pending history, previous summary, system instructions and current MCP schema size. It uses the existing conservative token counter. Large context windows may never trigger summarization; Chat MCP still reads original messages. There is no message-count trigger.
+When the provider reports input-token usage, that actual count determines whether the threshold has been crossed. If usage is absent, a rough byte-to-token estimate compares compressible history against the budget remaining after tool schemas. Large context windows may never trigger summarization; Chat MCP still reads original messages. There is no message-count trigger. Eligible old messages are batched into bounded summary requests instead of sending one request per message.
 
 SummaryService splits older material into bounded requests, even when one message is larger than the model window. It sends no tools and never forwards opaque provider continuations or reasoning payloads. It combines each new fragment with the tentative summary. Only after all requests succeed are content and boundary atomically replaced. Failure/cancellation leaves the old record unchanged. Model outputs are limited to 16 KB and the window-dependent cap; a maximum of 128 requests bounds one compression attempt.
 

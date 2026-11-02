@@ -1,10 +1,10 @@
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 from backend.app.mcp_client.models import MCPServerConfig, MCPConnectionStatus
 
 
 class MCPServerCreate(MCPServerConfig):
-    pass
+    bearer_token: str | None = Field(default=None, repr=False, exclude=True, max_length=4096)
 
 
 class MCPServerPatch(BaseModel):
@@ -14,16 +14,17 @@ class MCPServerPatch(BaseModel):
     url: str | None = Field(None, repr=False)
     connect_timeout: float | None = Field(None, gt=0, le=300, allow_inf_nan=False)
     operation_timeout: float | None = Field(None, gt=0, le=600, allow_inf_nan=False)
+    bearer_token: str | None = Field(None, repr=False, exclude=True, max_length=4096)
 
     @model_validator(mode="after")
     def validate_changes(self):
         if not self.model_fields_set:
             raise ValueError("Provide at least one field")
-        if any(getattr(self, key) is None for key in self.model_fields_set):
+        if any(getattr(self, key) is None for key in self.model_fields_set if key != "bearer_token"):
             raise ValueError("Connection fields cannot be null")
         # Reuse runtime validation, including URL rules and whitespace-only names.
         MCPServerConfig.model_validate({"id": "validation", "name": "Validation", "url": "http://localhost/mcp",
-                                        **self.model_dump(exclude_unset=True)})
+                                        **self.model_dump(exclude_unset=True, exclude={"bearer_token"})})
         return self
 
 
@@ -34,5 +35,11 @@ class MCPServerResponse(MCPServerConfig):
     created_at: datetime
     updated_at: datetime
 
+    @computed_field
+    @property
+    def has_token(self) -> bool:
+        return self.credential_ref is not None
+
     def connection_config(self):
-        return MCPServerConfig.model_validate(self.model_dump(include=set(MCPServerConfig.model_fields)))
+        return MCPServerConfig.model_validate({**self.model_dump(include=set(MCPServerConfig.model_fields)),
+                                               "credential_ref": self.credential_ref})

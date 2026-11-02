@@ -21,6 +21,7 @@ class MCPServerRecord(Base):
     name = Column(String(128), nullable=False)
     transport = Column(String(32), nullable=False, default="streamable_http")
     url = Column(Text, nullable=False)
+    credential_ref = Column(String(64), nullable=True)
     connect_timeout = Column(Float, nullable=False, default=10)
     operation_timeout = Column(Float, nullable=False, default=30)
     is_internal = Column(Boolean, nullable=False, default=False)

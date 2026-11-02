@@ -11,10 +11,12 @@ import time
 import anyio
 import httpx2
 from mcp import Client
+from mcp.client.streamable_http import streamable_http_client
 from mcp.shared.exceptions import MCPError
 from mcp.types import CONNECTION_CLOSED, REQUEST_TIMEOUT
 from pydantic import ValidationError
 from .models import MCPServerConfig, RuntimeFailure, MCPConnectionStatus
+from .credentials import MCPCredentialStore
 from .registry import ToolRegistry
 from backend.app.config import character_helper_logger
 
@@ -196,8 +198,17 @@ class MCPClientManager:
             log("connecting", sid)
 
             async with AsyncExitStack() as stack:
+                token = await MCPCredentialStore().get(conn.config.credential_ref) if conn.config.credential_ref else None
+                if conn.config.credential_ref and not token:
+                    raise RuntimeFailure("connection_error", "MCP authorization token is unavailable")
+                transport = conn.config.url
+                if token:
+                    http_client = await stack.enter_async_context(httpx2.AsyncClient(
+                        headers={"Authorization": "Bearer " + token},
+                        timeout=httpx2.Timeout(conn.config.connect_timeout, read=conn.config.operation_timeout)))
+                    transport = streamable_http_client(conn.config.url, http_client=http_client)
                 async with asyncio.timeout(conn.config.connect_timeout):
-                    client = await stack.enter_async_context(Client(conn.config.url,
+                    client = await stack.enter_async_context(Client(transport,
                                                                     read_timeout_seconds=conn.config.operation_timeout,
                                                                     cache=None))
                 conn.state = "connected"

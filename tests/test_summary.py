@@ -9,6 +9,7 @@ from backend.app.services.conversation_summary import SummaryService
 from backend.app.services.chat_generation import GenerationManager
 from backend.app.dto.chat import SendMessage
 from backend.app.llm.schemas import Message, ModelResponse, ProviderError
+from backend.app.services.chat_context import TokenCounter, record_input_usage
 from backend.app.mcp_adapter.chat_reading import register_chat_tools
 
 
@@ -23,6 +24,19 @@ class SummaryModel:
             raise ProviderError("timeout", "mock")
         return ModelResponse(provider_id="local", model="test", message=Message(role="assistant",
                                                                                 text="Факты: решили сохранить историю. Открытый вопрос: сроки."))
+
+
+class InputUsageTests(unittest.TestCase):
+    def test_exact_and_estimated_context_usage(self):
+        from types import SimpleNamespace
+        request = SimpleNamespace(messages=[Message(role="user", text="Привет")], tools=[])
+        state = {}
+        record_input_usage(state, SimpleNamespace(usage=SimpleNamespace(input_tokens=0)), request, TokenCounter())
+        self.assertGreater(state["input_tokens"], 0)
+        self.assertTrue(state["input_tokens_estimated"])
+        record_input_usage(state, SimpleNamespace(usage=SimpleNamespace(input_tokens=1700)), request, TokenCounter())
+        self.assertEqual(state["input_tokens"], 1700)
+        self.assertFalse(state["input_tokens_estimated"])
 
 
 class SummaryTests(unittest.IsolatedAsyncioTestCase):
@@ -42,6 +56,23 @@ class SummaryTests(unittest.IsolatedAsyncioTestCase):
                                           text=role + " " + str(pos) + " " + ("x" * length), status="completed",
                                           position=pos, provider_id="local", model="test"))
                         pos += 1
+
+    async def test_actual_usage_prevents_early_summary_and_batches_messages(self):
+        await self.seed(count=5, length=200)
+        async with self.sessions() as s:
+            async with s.begin():
+                chat = await s.get(Conversation, self.chat["id"])
+                chat.context_window_tokens = 100000
+                chat.max_output_tokens = 2048
+        service = SummaryService(self.service, self.builder)
+        model = SummaryModel()
+        self.assertFalse(await service.after_answer(self.chat["id"], model, {"input_tokens": 16000}))
+        self.assertEqual(model.requests, [])
+        self.assertTrue(await service.after_answer(self.chat["id"], model, {"input_tokens": 80000}))
+        self.assertEqual(len(model.requests), 1)
+        fragment = model.requests[0].messages[-1].text
+        self.assertIn('"role": "user"', fragment)
+        self.assertIn('"role": "assistant"', fragment)
 
     async def test_incremental_boundary_and_failure(self):
         await self.seed()

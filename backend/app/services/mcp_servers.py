@@ -4,11 +4,13 @@ Network work never holds a SQLAlchemy session. Runtime configuration changes
 are serialized and finish even when an HTTP caller disconnects.
 """
 import asyncio
+from uuid import uuid4
 from contextlib import nullcontext
 from sqlalchemy import select
 from backend.app.db.session import write_transaction
 from backend.app.dto.mcp_servers import MCPServerCreate, MCPServerPatch, MCPServerResponse
 from backend.app.mcp_client.models import MCPServerConfig
+from backend.app.mcp_client.credentials import MCPCredentialStore
 from backend.app.models.mcp_server import MCPServerRecord
 
 
@@ -31,6 +33,7 @@ class MCPServerService:
         self._lock = asyncio.Lock()
         self._pending = set()
         self._closed = False
+        self.credentials = MCPCredentialStore()
 
     async def read_all(self):
         async with self.session_factory() as session:
@@ -90,14 +93,23 @@ class MCPServerService:
             raise InternalMCPServer("The ID folliant is reserved for the internal connection")
 
         async def operation():
-            async with self.session_factory() as session:
-                async with write_transaction(session, lock_model=MCPServerRecord):
-                    if await session.get(MCPServerRecord, data.id):
-                        raise MCPServerConflict("MCP server ID already exists")
-                    record = MCPServerRecord(**data.model_dump(), is_internal=False)
-                    session.add(record)
-                    await session.flush()
-                    result = MCPServerResponse.model_validate(record)
+            token = (data.bearer_token or "").strip()
+            ref = uuid4().hex if token else None
+            if ref:
+                await self.credentials.set(ref, token)
+            try:
+                async with self.session_factory() as session:
+                    async with write_transaction(session, lock_model=MCPServerRecord):
+                        if await session.get(MCPServerRecord, data.id):
+                            raise MCPServerConflict("MCP server ID already exists")
+                        record = MCPServerRecord(**data.model_dump(), credential_ref=ref, is_internal=False)
+                        session.add(record)
+                        await session.flush()
+                        result = MCPServerResponse.model_validate(record)
+            except BaseException:
+                if ref:
+                    await self.credentials.delete(ref)
+                raise
             if self.manager is not None:
                 self.manager.register(result.connection_config())
             return result
@@ -111,26 +123,42 @@ class MCPServerService:
             # Check protection before disturbing the internal live session.
             self._editable(await self.get(server_id))
             async with self.manager.edit_registration(server_id) if self.manager is not None else nullcontext():
-                async with self.session_factory() as session:
-                    async with write_transaction(session, lock_model=MCPServerRecord):
-                        record = await self._get(session, server_id)
-                        self._editable(record)
-                        old = MCPServerResponse.model_validate(record).connection_config()
-                        config = MCPServerConfig.model_validate({**old.model_dump(),
-                                                                 **data.model_dump(exclude_unset=True)})
-                        for key, value in config.model_dump().items():
-                            setattr(record, key, value)
-                        await session.flush()
-                        result = MCPServerResponse.model_validate(record)
+                new_ref = None
+                token_change = "bearer_token" in data.model_fields_set
+                token = (data.bearer_token or "").strip() if token_change else ""
+                if token:
+                    new_ref = uuid4().hex
+                    await self.credentials.set(new_ref, token)
+                try:
+                    async with self.session_factory() as session:
+                        async with write_transaction(session, lock_model=MCPServerRecord):
+                            record = await self._get(session, server_id)
+                            self._editable(record)
+                            old_ref = record.credential_ref
+                            config = MCPServerConfig.model_validate({**MCPServerResponse.model_validate(record).connection_config().model_dump(),
+                                **data.model_dump(exclude_unset=True, exclude={"bearer_token"})})
+                            for key, value in config.model_dump().items():
+                                setattr(record, key, value)
+                            if token_change:
+                                record.credential_ref = new_ref
+                            await session.flush()
+                            result = MCPServerResponse.model_validate(record)
+                except BaseException:
+                    if new_ref:
+                        await self.credentials.delete(new_ref)
+                    raise
                 if self.manager is not None:
                     self.manager.replace_registration(result.connection_config())
+                if token_change and old_ref:
+                    await self.credentials.delete(old_ref)
                 return result
 
         return await self._change(operation)
 
     async def delete(self, server_id):
         async def operation():
-            self._editable(await self.get(server_id))
+            previous = await self.get(server_id)
+            self._editable(previous)
             async with self.manager.edit_registration(server_id) if self.manager is not None else nullcontext():
                 async with self.session_factory() as session:
                     async with write_transaction(session, lock_model=MCPServerRecord):
@@ -139,6 +167,8 @@ class MCPServerService:
                         await session.delete(record)
                 if self.manager is not None:
                     self.manager.remove_registration(server_id)
+                if previous.credential_ref:
+                    await self.credentials.delete(previous.credential_ref)
 
         return await self._change(operation)
 

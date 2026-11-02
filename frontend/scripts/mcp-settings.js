@@ -84,6 +84,9 @@
             '<label>Идентификатор<input name="id" required maxlength="64" pattern="[A-Za-z0-9_-]{1,64}" value="' + E(value.id) + '"' + (record ? ' readonly' : '') + ' placeholder="например, notes" autocomplete="off" spellcheck="false"></label><p class="form-hint">Латинские буквы, цифры, дефис и подчёркивание. После создания изменить нельзя.</p>' +
             '<label>Адрес сервера<input type="url" name="url" required maxlength="2048" value="' + E(value.url) + '"' + ro + ' placeholder="http://127.0.0.1:9000/mcp" autocomplete="off" spellcheck="false"></label>' +
             '<p class="form-hint">Streamable HTTP · http или https. Без паролей, параметров запроса и токенов в адресе.</p>' +
+            (!internal ? '<label>Токен авторизации <small>(необязательно)</small><span class="plugin-token-field"><span>Authorization: Bearer</span><input type="password" name="bearer_token" maxlength="4096" placeholder="' + (value.has_token ? 'Токен сохранён; оставьте пустым, чтобы не менять' : 'Введите токен, если сервер его требует') + '" autocomplete="new-password" spellcheck="false"></span></label>' +
+                (record && value.has_token ? '<label class="plugin-token-remove"><input type="checkbox" name="remove_token">Удалить сохранённый токен</label>' : '') +
+                '<p class="form-hint">Токен хранится в защищённом хранилище ОС и не отображается после сохранения.</p>' : '') +
             '<details class="plugin-advanced"><summary>Время ожидания</summary><div class="form-row"><label>Подключение, секунд<input type="number" name="connect_timeout" min="0.01" max="300" step="any" required value="' + E(String(value.connect_timeout)) + '"' + ro + '></label><label>Ответ, секунд<input type="number" name="operation_timeout" min="0.01" max="600" step="any" required value="' + E(String(value.operation_timeout)) + '"' + ro + '></label></div></details>' +
             (record ? '<div class="plugin-status" id="plugin-status" role="status">Проверка соединения ещё не выполнялась.</div>' : '') +
             '<p class="form-error" role="alert" hidden></p><div class="dialog-actions">' +
@@ -129,6 +132,9 @@
                 connect_timeout: Number(fields.connect_timeout.value),
                 operation_timeout: Number(fields.operation_timeout.value)
             };
+            const token = fields.bearer_token.value.trim();
+            if (token) body.bearer_token = token;
+            else if (fields.remove_token?.checked) body.bearer_token = null;
             if (!body.name) return report('Введите название плагина.');
             try {
                 const url = new URL(body.url);
@@ -147,7 +153,8 @@
         };
         if (record) {
             el.querySelector('#plugin-test').onclick = () => {
-                if (!internal && ['name', 'url', 'connect_timeout', 'operation_timeout'].some(key => String(el.elements[key].value) !== String(value[key]))) {
+                if (!internal && (['name', 'url', 'connect_timeout', 'operation_timeout'].some(key => String(el.elements[key].value) !== String(value[key])) ||
+                    el.elements.bearer_token.value.trim() || el.elements.remove_token?.checked)) {
                     report('Сначала сохраните изменения — проверяется сохранённое подключение.');
                     return;
                 }

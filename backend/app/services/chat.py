@@ -133,13 +133,17 @@ class ChatService:
                     if m.status != "completed":
                         m.status = "interrupted"
 
-    async def checkpoint(self, id, text, status, error=None, answer_complete=False, phase=None):
+    async def checkpoint(self, id, text, status, error=None, answer_complete=False, phase=None,
+                         input_tokens=None, input_tokens_estimated=None):
         async with self.sessions() as s:
             async with write_transaction(s, lock_model=Conversation):
                 run = await s.get(GenerationRun, id)
                 m = await s.get(ChatMessage, run.assistant_message_id)
                 m.text, m.status = text, "completed" if answer_complete else status
                 run.status, run.error = status, error
+                if input_tokens is not None:
+                    run.input_tokens = input_tokens
+                    run.input_tokens_estimated = input_tokens_estimated
                 if phase:
                     run.phase = phase
                 if status not in ACTIVE:

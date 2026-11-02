@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, UniqueConstraint, Index, text, JSON
+from sqlalchemy import Column, Integer, Boolean, String, Text, ForeignKey, UniqueConstraint, Index, text, JSON
 from backend.app.db.base import Base
 from backend.app.db.types import UTCDateTime
 from backend.app.utils.time import utc_now
@@ -49,6 +49,8 @@ class GenerationRun(Base):
     assistant_message_id = Column(String(32), ForeignKey("chat_messages.id", ondelete="CASCADE"), nullable=False)
     status = Column(String(16), nullable=False)
     error = Column(Text, nullable=True)
+    input_tokens = Column(Integer, nullable=True)
+    input_tokens_estimated = Column(Boolean, nullable=True)
     started_at = Column(UTCDateTime(), nullable=False, default=utc_now)
     finished_at = Column(UTCDateTime(), nullable=True)
 

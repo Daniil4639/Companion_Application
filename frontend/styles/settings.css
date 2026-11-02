@@ -269,6 +269,12 @@
     background: #D7BD9025;
 }
 
+.plugin-token-field { display:flex; align-items:stretch; margin-top:6px; border:1px solid var(--line); border-radius:5px; overflow:hidden; }
+.plugin-token-field > span { display:flex; align-items:center; flex:none; padding:0 10px; background:#D7BD9040; color:#765A42; font:12px ui-monospace,Consolas,monospace; }
+#plugin-dialog .plugin-token-field input { flex:1; min-width:0; margin:0; border:0; border-radius:0; }
+#plugin-dialog .plugin-token-remove { display:flex; align-items:center; gap:8px; margin-top:8px; font-size:12px; }
+#plugin-dialog .plugin-token-remove input { width:auto; margin:0; }
+
 #plugin-dialog .plugin-status {
     margin-top: 14px;
     padding: 12px;

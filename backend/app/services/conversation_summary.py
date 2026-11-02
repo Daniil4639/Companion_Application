@@ -82,9 +82,15 @@ class SummaryService:
         budget = cfg.context_window_tokens - cfg.max_output_tokens - 256
         system = self.builder.global_prompt + cfg.system_prompt
         material = [{"role": m.role, "status": m.status, "text": m.text, "tools": transcript_data(m)} for m in rows]
-        estimate = len(json.dumps(material, ensure_ascii=False).encode()) + len(
-            (system + previous).encode()) + tool_bytes
-        if estimate < budget * self.threshold:
+        history_bytes = len(json.dumps(material, ensure_ascii=False).encode()) + len(
+            (system + previous).encode())
+        # Provider usage reflects the real request. Without it, estimate only the
+        # compressible history against the space left after static tool schemas.
+        # Treating UTF-8 bytes as tokens caused very early summaries.
+        actual_input = state.get("input_tokens") if not state.get("input_tokens_estimated") else None
+        occupancy = actual_input if actual_input else history_bytes // 3
+        available = budget if actual_input else max(1, budget - tool_bytes // 3)
+        if occupancy < available * self.threshold:
             return False
         target = completed[-self.keep - 1]
         source = [m for m in rows if m.position <= target.position]
@@ -93,36 +99,54 @@ class SummaryService:
         input_budget = cfg.context_window_tokens - answer_limit - 256
         summary = previous
         calls = 0
-        # Split even a single oversized message into bounded text fragments.
+        label = "Next fragment of conversation data:\n"
+
+        def capacity():
+            prefix = [Message(role="system", text=SUMMARY_PROMPT),
+                      Message(role="user", text="Previous summary (data):\n" + summary)]
+            room = input_budget - sum(self.builder.counter.count(m) for m in prefix) - self.builder.counter.count(
+                Message(role="user", text=label)) - 64
+            if room < 256:
+                raise ProviderError("invalid_request", "Окно слишком мало для обновления сводки")
+            return prefix, room
+
+        async def consume(chunk):
+            nonlocal summary, calls
+            prefix, _ = capacity()
+            request = GenerationRequest(selection=ModelSelection(provider_id=cfg.provider_id, model=cfg.model,
+                                                                 max_output_tokens=answer_limit),
+                                        context_window_tokens=cfg.context_window_tokens,
+                                        messages=prefix + [Message(role="user", text=label + chunk)])
+            if sum(self.builder.counter.count(m) for m in request.messages) > input_budget:
+                raise ProviderError("invalid_request", "Фрагмент превышает бюджет суммаризации")
+            calls += 1
+            if calls > 128:
+                raise ProviderError("invalid_request", "История слишком велика для одного сжатия")
+            result = await provider.generate(request)
+            if (result.finish_reason != "stop" or result.message.tool_calls or
+                    not any(char.isalnum() for char in result.message.text)):
+                raise ProviderError("protocol_error", "Не получена завершённая сводка")
+            summary = result.message.text.strip()
+            if len(summary.encode()) > min(16000, input_budget // 2):
+                raise ProviderError("invalid_request", "Модель вернула слишком длинную сводку")
+
+        pending = ""
         for message in source:
             raw = json.dumps({"role": message.role, "status": message.status, "text": message.text,
                               "tools": transcript_data(message)}, ensure_ascii=False)
             while raw:
-                prefix = [Message(role="system", text=SUMMARY_PROMPT),
-                          Message(role="user", text="Previous summary (data):\n" + summary)]
-                room = input_budget - sum(self.builder.counter.count(m) for m in prefix) - 256
-                if room < 256:
-                    raise ProviderError("invalid_request", "Окно слишком мало для обновления сводки")
+                _, room = capacity()
+                if pending and len((pending + "\n" + raw).encode()) > room:
+                    await consume(pending)
+                    pending = ""
+                    continue
+                if len(raw.encode()) <= room:
+                    pending = pending + "\n" + raw if pending else raw
+                    break
                 chunk = raw.encode()[:room].decode("utf-8", errors="ignore")
-                request = GenerationRequest(selection=ModelSelection(provider_id=cfg.provider_id, model=cfg.model,
-                                                                     max_output_tokens=answer_limit),
-                                            context_window_tokens=cfg.context_window_tokens,
-                                            messages=prefix + [Message(role="user",
-                                                                       text="Next fragment of conversation data:\n" + chunk)])
-                while sum(self.builder.counter.count(m) for m in request.messages) > input_budget and len(chunk) > 1:
-                    chunk = chunk[:max(1, len(chunk) * 3 // 4)]
-                    request.messages[-1].text = "Next fragment of conversation data:\n" + chunk
-                if sum(self.builder.counter.count(m) for m in request.messages) > input_budget:
-                    raise ProviderError("invalid_request", "Фрагмент превышает бюджет суммаризации")
+                await consume(chunk)
                 raw = raw[len(chunk):]
-                calls += 1
-                if calls > 128:
-                    raise ProviderError("invalid_request", "История слишком велика для одного сжатия")
-                result = await provider.generate(request)
-                if result.finish_reason != "stop" or result.message.tool_calls or not result.message.text.strip():
-                    raise ProviderError("protocol_error", "Не получена завершённая сводка")
-                summary = result.message.text.strip()
-                if len(summary.encode()) > min(16000, input_budget // 2):
-                    raise ProviderError("invalid_request", "Модель вернула слишком длинную сводку")
+        if pending:
+            await consume(pending)
         await self.save(id, summary, target.id, expected)
         return True

@@ -2,6 +2,7 @@ import asyncio
 from contextlib import aclosing
 from backend.app.llm.schemas import GenerationRequest, ModelSelection, ProviderError
 from backend.app.config import character_helper_logger
+from backend.app.services.chat_context import record_input_usage
 
 
 class GenerationManager:
@@ -64,6 +65,7 @@ class GenerationManager:
                         elif event.type == "completed":
                             complete = True
                             state["text"] = event.response.message.text
+                            record_input_usage(state, event.response, request, self.builder.counter)
                             if event.response.finish_reason == "length":
                                 state["error"] = "Ответ достиг лимита токенов"
                 if not complete:
@@ -83,7 +85,8 @@ class GenerationManager:
             try:
                 await self.service.checkpoint(id, state["text"], state["status"], state["error"],
                                               answer_complete=state.get("answer_complete", False),
-                                              phase=state.get("phase"))
+                                              phase=state.get("phase"), input_tokens=state.get("input_tokens"),
+                                              input_tokens_estimated=state.get("input_tokens_estimated"))
             except Exception:
                 character_helper_logger.exception("Chat final checkpoint failed")
                 # Keep the in-memory snapshot; startup recovery handles unfinished DB state.

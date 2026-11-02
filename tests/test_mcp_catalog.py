@@ -8,7 +8,7 @@ from pathlib import Path
 import socket
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import text
@@ -17,6 +17,7 @@ from backend.app.db.session import make_engine
 from backend.app.dto.mcp_servers import MCPServerCreate, MCPServerPatch
 from backend.app.mcp_client.manager import MCPClientManager
 from backend.app.services.mcp_servers import MCPServerService, InternalMCPServer
+from backend.app.models.mcp_server import MCPServerRecord
 import test_mcp
 
 PREFIX = "/api/mcp/servers"
@@ -146,6 +147,42 @@ class CatalogIntegration(unittest.IsolatedAsyncioTestCase):
 
 
 class CatalogPersistence(unittest.IsolatedAsyncioTestCase):
+    async def test_optional_bearer_token_stays_out_of_database_and_api_response(self):
+        with tempfile.TemporaryDirectory() as directory:
+            engine = make_engine("sqlite+aiosqlite:///" + (Path(directory) / "tokens.db").as_posix())
+            factory = async_sessionmaker(engine, expire_on_commit=False)
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            manager = MCPClientManager()
+            service = MCPServerService(factory, manager)
+            service.credentials.set = AsyncMock()
+            service.credentials.delete = AsyncMock()
+            try:
+                plain = await service.create(MCPServerCreate(id="plain", name="Plain", url="http://localhost/mcp"))
+                self.assertFalse(plain.has_token)
+                self.assertIsNone(plain.credential_ref)
+                secured = await service.create(MCPServerCreate(id="secured", name="Secured",
+                    url="http://localhost/mcp", bearer_token="secret-value"))
+                self.assertTrue(secured.has_token)
+                self.assertNotIn("secret-value", str(secured.model_dump()))
+                self.assertNotIn("credential_ref", secured.model_dump())
+                ref = secured.credential_ref
+                service.credentials.set.assert_awaited_once_with(ref, "secret-value")
+                async with factory() as session:
+                    row = await session.get(MCPServerRecord, "secured")
+                    self.assertEqual(row.credential_ref, ref)
+                    self.assertNotIn("secret-value", str(row.__dict__))
+                changed = await service.update("secured", MCPServerPatch(name="Renamed"))
+                self.assertEqual(changed.credential_ref, ref)
+                cleared = await service.update("secured", MCPServerPatch(bearer_token=None))
+                self.assertFalse(cleared.has_token)
+                self.assertIsNone(cleared.credential_ref)
+                service.credentials.delete.assert_awaited_once_with(ref)
+            finally:
+                await service.aclose()
+                await manager.aclose()
+                await engine.dispose()
+
     async def test_restart_port_change_internal_sql_constraint_and_cancelled_edit(self):
         with tempfile.TemporaryDirectory() as directory:
             engine = make_engine("sqlite+aiosqlite:///" + (Path(directory) / "catalog.db").as_posix())

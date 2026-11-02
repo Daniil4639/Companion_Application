@@ -53,6 +53,17 @@
         $('#chat-error').hidden = true;
     }
 
+    function renderContextUsage(run) {
+        const badge = $('#chat-context-usage');
+        const used = run?.input_tokens, limit = selected?.context_window_tokens;
+        badge.hidden = !Number.isFinite(used) || !Number.isFinite(limit);
+        if (badge.hidden) return;
+        const compact = value => value >= 1000 ? (Math.round(value / 100) / 10).toLocaleString('en-US') + 'k' : String(value);
+        badge.textContent = (run.input_tokens_estimated ? '~' : '') + compact(used) + ' / ' + compact(limit);
+        badge.title = (run.input_tokens_estimated ? 'Приблизительный' : 'Сообщённый моделью') +
+            ' размер входного контекста последнего ответа · лимит из настроек чата';
+    }
+
     const toolStates = {
         waiting_approval: 'Ожидает подтверждения',
         approved: 'Подтверждён',
@@ -410,6 +421,7 @@
     $('#chat-mcp-open').onclick = () => editMcpConnections().catch(report);
 
     function observe(run) {
+        renderContextUsage(run);
         source?.close();
         activeRun = ['pending', 'running'].includes(run.status) ? run.id : null;
         controls();
@@ -432,6 +444,7 @@
                 summarizing: 'Сжимаю историю…'
             };
             $('#chat-status').textContent = (data.status === 'running' ? phases[data.phase] || labels[data.status] : labels[data.status]) + (data.error ? ' · ' + data.error : '');
+            renderContextUsage(data);
             renderTools(data);
             renderMessages();
             if (!['pending', 'running'].includes(data.status)) {
@@ -464,6 +477,7 @@
         rememberChat(c.id);
         $('#chat-title').textContent = c.title;
         $('#chat-model').textContent = c.model + (c.provider_id ? '' : ' · подключение удалено');
+        renderContextUsage(run);
         $('#chat-status').textContent = '';
         $('#chat-input').value = '';
         renderList();
@@ -627,6 +641,7 @@
                 messages = [];
                 $('#chat-title').textContent = 'Ваш собеседник';
                 $('#chat-model').textContent = '';
+                renderContextUsage(null);
                 $('#chat-status').textContent = '';
                 renderMessages();
                 controls();

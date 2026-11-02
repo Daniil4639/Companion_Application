@@ -25,6 +25,7 @@ class MCPServerConfig(BaseModel):
         repr=False,
         max_length=2048
     )
+    credential_ref: str | None = Field(default=None, exclude=True, repr=False)
 
     connect_timeout: float = Field(
         default=10,

@@ -195,6 +195,9 @@
     min-width: 0;
 }
 
+.chat-toolbar-actions { display:flex; align-items:center; gap:12px; }
+#chat-context-usage { flex:none; color:#667458; font-size:11px; white-space:nowrap; }
+
 .chat-toolbar h2 {
     font: 23px var(--serif);
     margin: 0 0 4px;

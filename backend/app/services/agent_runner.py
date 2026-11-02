@@ -6,6 +6,7 @@ from contextlib import aclosing
 from types import SimpleNamespace
 from backend.app.llm.schemas import Message, ToolDefinition, ProviderError
 from backend.app.mcp_client.models import RuntimeFailure
+from backend.app.services.chat_context import record_input_usage
 
 
 def bounded(value, limit=24000):
@@ -95,6 +96,7 @@ class AgentRunner:
                 await stream_once()
             if response is None:
                 raise ProviderError("protocol_error", "Поток завершился без итогового ответа")
+            record_input_usage(state, response, request, self.builder.counter)
             message = response.message
             state["text"] = previous_text + message.text
             if message.tool_calls and response.finish_reason not in ("tool_calls", "stop"):
