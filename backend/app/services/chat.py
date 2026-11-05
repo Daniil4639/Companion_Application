@@ -7,7 +7,7 @@ from backend.app.models.mcp_server import MCPServerRecord
 from backend.app.models.llm import LLMProviderRecord
 from backend.app.models.user import User
 from backend.app.db.session import write_transaction
-from backend.app.utils.time import utc_now
+from backend.app.utils.time import utc_now, zone
 from backend.app.llm.schemas import ProviderError
 
 
@@ -201,11 +201,15 @@ class ChatService:
                     select(ChatMessage).where(ChatMessage.conversation_id == id).order_by(ChatMessage.position))).all()
                 summary = await s.get(ConversationSummary, id)
                 user = await s.get(User, 1)
+                timezone = user.timezone if user else "UTC"
+                local_now = utc_now().astimezone(zone(timezone))
                 user_context = {
                     "username": user.username if user else "",
                     "display_name": user.display_name if user else None,
-                    "timezone": user.timezone if user else "UTC",
+                    "timezone": timezone,
                     "locale": user.locale if user else "ru-RU",
+                    "local_date": local_now.date().isoformat(),
+                    "local_datetime": local_now.isoformat(timespec="seconds"),
                 }
                 context = builder.build(c, history, data.text, summary=summary, user_context=user_context)
                 pos = history[-1].position + 1 if history else 0
